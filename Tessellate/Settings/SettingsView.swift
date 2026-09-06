@@ -152,6 +152,8 @@ private struct GeneralSettings: View {
                     .background(Color.green.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
+
+                RunningBinaryRow()
             } header: {
                 Text("Permissions")
             }
@@ -386,5 +388,46 @@ private struct GridPreview: View {
         case .center: return "Space"
         case .maximize: return "↑"
         }
+    }
+}
+
+
+/// The permission is bound to this exact binary. During development the path
+/// changes between builds (and an ad-hoc signature invalidates the grant on
+/// every rebuild), so show which executable is actually asking.
+private struct RunningBinaryRow: View {
+    @State private var copied = false
+
+    private var bundlePath: String { Bundle.main.bundlePath }
+    private var executablePath: String { Bundle.main.executablePath ?? "unknown" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Granted to this executable")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(executablePath)
+                .font(.system(size: 11, design: .monospaced))
+                .textSelection(.enabled)
+                .lineLimit(3)
+                .truncationMode(.middle)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 12) {
+                Button(copied ? "Copied" : "Copy path") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(bundlePath, forType: .string)
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+                }
+                Button("Reveal in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: bundlePath)])
+                }
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+        }
+        .padding(.top, 4)
     }
 }

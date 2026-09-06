@@ -107,6 +107,7 @@ final class AppCoordinator: ObservableObject {
                 let trusted = WindowEngine.isTrusted()
                 if let self, self.isAccessibilityGranted != trusted {
                     self.isAccessibilityGranted = trusted
+                    if trusted { self.hotkeyManager.armTapIfNeeded() }
                 }
             }
         }
@@ -127,6 +128,7 @@ final class AppCoordinator: ObservableObject {
         hotkeyManager.enterPlacementMode()
 
         let target = WindowEngine.captureFocusedWindow()
+        NSLog("Tessellate: captured target=\(target?.appName ?? "none")")
         pendingTarget = target
         if let target {
             FocusIndicatorController.shared.show(target: target)
@@ -149,7 +151,8 @@ final class AppCoordinator: ObservableObject {
         }
         let gridRect = store.layout.rect(for: command).clamped(to: store.layout.grid)
         let cgRect = ScreenGeometry.gridRect(gridRect, grid: store.layout.grid, on: target.screen)
-        WindowEngine.apply(cgRect, to: target.element)
+        let ok = WindowEngine.apply(cgRect, to: target.element)
+        NSLog("Tessellate: apply \(command.rawValue) -> \(cgRect) on \(target.appName) ok=\(ok)")
     }
 
     func openSettings() {

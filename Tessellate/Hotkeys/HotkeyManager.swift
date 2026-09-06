@@ -75,6 +75,7 @@ final class HotkeyManager: ObservableObject {
                 guard let userData else { return noErr }
                 let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
                 Task { @MainActor in
+                    NSLog("Tessellate: activation hotkey fired")
                     manager.onActivation()
                 }
                 return noErr
@@ -123,6 +124,7 @@ final class HotkeyManager: ObservableObject {
         inPlacementMode = true
         isInPlacementMode = true
         activationGraceUntil = Date().addingTimeInterval(0.25)
+        NSLog("Tessellate: enter placement mode")
         installTap()
         if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
 
@@ -144,6 +146,7 @@ final class HotkeyManager: ObservableObject {
         timeoutItem = nil
         activationGraceUntil = nil
         if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
+        NSLog("Tessellate: exit placement mode")
         onExit()
     }
 
@@ -188,6 +191,14 @@ final class HotkeyManager: ObservableObject {
         CGEvent.tapEnable(tap: tap, enable: true)
     }
 
+    /// The eager tap install fails when Accessibility hasn't been granted yet.
+    /// Retry once the grant lands so the first activation is still fast.
+    func armTapIfNeeded() {
+        guard eventTap == nil else { return }
+        installTap()
+        if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: inPlacementMode) }
+    }
+
     func reenableTap() {
         guard let tap = eventTap else { return }
         CGEvent.tapEnable(tap: tap, enable: inPlacementMode)
@@ -205,6 +216,7 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func handleCapturedKey(keyCode: UInt16, carbonMods: UInt) {
+        NSLog("Tessellate: captured key=\(keyCode) mods=\(carbonMods) inPlacement=\(inPlacementMode)")
         guard inPlacementMode else { return }
 
         // Only swallow a repeat of the *whole* activation combo (key held down).
@@ -213,6 +225,7 @@ final class HotkeyManager: ObservableObject {
         if let until = activationGraceUntil, Date() < until,
            keyCode == store.layout.activationKeyCode,
            carbonMods == store.layout.activationModifiers {
+            NSLog("Tessellate: ignored activation combo repeat during grace")
             return
         }
 
@@ -221,11 +234,17 @@ final class HotkeyManager: ObservableObject {
             return
         }
 
+        var matched = false
+        defer { if !matched { NSLog("Tessellate: no command bound to key=\(keyCode) mods=\(carbonMods)") } }
         for command in PlacementCommand.allCases {
             guard let binding = store.layout.binding(for: command), binding.keyCode != 0 else { continue }
             if binding.keyCode == keyCode && binding.modifiers == carbonMods {
-                exitPlacementMode()
+                matched = true
+                NSLog("Tessellate: matched \(command.rawValue)")
+                // onCommand first: exitPlacementMode fires onExit, which clears
+                // the window captured at activation.
                 onCommand(command)
+                exitPlacementMode()
                 return
             }
         }

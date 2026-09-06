@@ -31,11 +31,12 @@ enum PlacementCommand: String, CaseIterable, Codable, Identifiable {
 
     func defaultRect(in grid: GridDimensions) -> GridRect {
         let f = defaultFraction
+        // Round both edges, not position and size separately, so margins stay symmetric.
         let x = Int((f.x * Double(grid.columns)).rounded())
         let y = Int((f.y * Double(grid.rows)).rounded())
-        let w = max(1, Int((f.w * Double(grid.columns)).rounded()))
-        let h = max(1, Int((f.h * Double(grid.rows)).rounded()))
-        return GridRect(x: x, y: y, w: w, h: h).clamped(to: grid)
+        let x2 = Int(((f.x + f.w) * Double(grid.columns)).rounded())
+        let y2 = Int(((f.y + f.h) * Double(grid.rows)).rounded())
+        return GridRect(x: x, y: y, w: max(1, x2 - x), h: max(1, y2 - y)).clamped(to: grid)
     }
 
     var defaultRect: GridRect { defaultRect(in: .default) }
@@ -143,15 +144,16 @@ struct GridDimensions: Codable, Equatable {
         guard width > 0, height > 0 else { return .default }
         let target = density.targetCellSize
         let ideal = max(2, Int((width / target).rounded()))
-        let lower = max(2, ideal - 6)
-        let upper = min(bounds.upperBound, ideal + 6)
+        let lower = max(2, ideal - 2)
+        let upper = min(bounds.upperBound, ideal + 2)
 
         var best = GridDimensions.default
         var bestScore = Double.greatestFiniteMagnitude
-        // Counts stay even so halves and quarters split exactly.
+        // Columns stay even so left/right halves split exactly; the narrow range
+        // around `ideal` keeps the three densities distinct on any display.
         for columns in stride(from: lower.rounded2(), through: upper, by: 2) {
             let cellW = width / CGFloat(columns)
-            let rows = min(bounds.upperBound, max(2, Int((height / cellW / 2).rounded()) * 2))
+            let rows = min(bounds.upperBound, max(1, Int((height / cellW).rounded())))
             let cellH = height / CGFloat(rows)
             // Squareness dominates; cell size is the tie-breaker.
             let squareError = abs(Double(cellW / cellH) - 1)
@@ -243,11 +245,13 @@ struct TessellateLayout: Codable, Equatable {
         let sy = Double(newGrid.rows) / Double(old.rows)
         for command in PlacementCommand.allCases {
             let r = rect(for: command)
+            // Scale both edges so margins stay symmetric after rounding.
             let x = min(max(0, Int((Double(r.x) * sx).rounded())), newGrid.columns - 1)
             let y = min(max(0, Int((Double(r.y) * sy).rounded())), newGrid.rows - 1)
-            let w = max(1, Int((Double(r.w) * sx).rounded()))
-            let h = max(1, Int((Double(r.h) * sy).rounded()))
-            rects[command.rawValue] = GridRect(x: x, y: y, w: w, h: h).clamped(to: newGrid)
+            let x2 = Int((Double(r.x + r.w) * sx).rounded())
+            let y2 = Int((Double(r.y + r.h) * sy).rounded())
+            rects[command.rawValue] = GridRect(x: x, y: y, w: max(1, x2 - x), h: max(1, y2 - y))
+                .clamped(to: newGrid)
         }
         grid = newGrid
     }
