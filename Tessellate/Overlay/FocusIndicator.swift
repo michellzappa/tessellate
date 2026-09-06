@@ -79,12 +79,14 @@ private final class FocusIndicatorView: NSView {
         dirtyRect.fill()
 
         if let message {
-            drawBadge(text: message, icon: nil, centeredIn: bounds, tint: NSColor.systemOrange)
+            drawBadge(text: message, icon: nil, centeredIn: bounds, tint: NSColor.white.withAlphaComponent(0.28))
             return
         }
         guard let target else { return }
 
-        let accent = NSColor.controlAccentColor
+        // Neutral, not the system accent: the outline marks which window is
+        // about to move, it is not a selection or a control.
+        let outlineColor = NSColor.white.withAlphaComponent(0.92)
 
         // Dim everything except the target window.
         NSColor.black.withAlphaComponent(0.22).setFill()
@@ -94,14 +96,15 @@ private final class FocusIndicatorView: NSView {
         mask.fill()
 
         let outline = NSBezierPath(roundedRect: target.insetBy(dx: 1.5, dy: 1.5), xRadius: 10, yRadius: 10)
-        outline.lineWidth = 3
-        accent.setStroke()
-        outline.stroke()
 
-        accent.withAlphaComponent(0.10).setFill()
+        NSColor.white.withAlphaComponent(0.06).setFill()
         outline.fill()
 
-        drawBadge(text: appName, icon: appIcon, centeredIn: target, tint: accent)
+        outline.lineWidth = 3
+        outlineColor.setStroke()
+        outline.stroke()
+
+        drawBadge(text: appName, icon: appIcon, centeredIn: target, tint: NSColor.white.withAlphaComponent(0.28))
     }
 
     private func drawBadge(text: String, icon: NSImage?, centeredIn rect: CGRect, tint: NSColor) {
@@ -128,7 +131,7 @@ private final class FocusIndicatorView: NSView {
         let bg = NSBezierPath(roundedRect: badge, xRadius: h / 2, yRadius: h / 2)
         NSColor.black.withAlphaComponent(0.72).setFill()
         bg.fill()
-        tint.withAlphaComponent(0.9).setStroke()
+        tint.setStroke()
         bg.lineWidth = 1
         bg.stroke()
 
