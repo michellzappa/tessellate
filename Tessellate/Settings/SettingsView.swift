@@ -34,9 +34,9 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @EnvironmentObject var coordinator: AppCoordinator
+    @ObservedObject private var store = LayoutStore.shared
 
     var body: some View {
-        let store = coordinator.store
 
         Form {
             Section {
@@ -174,9 +174,9 @@ private struct GeneralSettings: View {
 
 private struct ActivationSettings: View {
     @EnvironmentObject var coordinator: AppCoordinator
+    @ObservedObject private var store = LayoutStore.shared
 
     var body: some View {
-        let store = coordinator.store
 
         Form {
             Section {
@@ -241,9 +241,9 @@ private struct CommandsSettings: View {
 private struct CommandSection: View {
     let command: PlacementCommand
     @EnvironmentObject var coordinator: AppCoordinator
+    @ObservedObject private var store = LayoutStore.shared
 
     var body: some View {
-        let store = coordinator.store
         let currentBinding = store.layout.bindings[command.rawValue]
 
         VStack(alignment: .leading, spacing: 8) {

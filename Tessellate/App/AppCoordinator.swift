@@ -48,9 +48,29 @@ final class AppCoordinator: ObservableObject {
         observeScreens()
         refreshAutomaticGrid()
         pollAccessibility()
+        installDebugTriggers()
         if !isAccessibilityGranted {
             WindowEngine.requestTrust()
         }
+    }
+
+    /// Debug-build hooks so the activation and placement paths can be exercised
+    /// without synthesising key events (which needs its own Accessibility grant).
+    private func installDebugTriggers() {
+        #if DEBUG
+        let center = DistributedNotificationCenter.default()
+        center.addObserver(forName: .init("app.tessellate.debug.activate"), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleActivation() }
+        }
+        center.addObserver(forName: .init("app.tessellate.debug.command"), object: nil, queue: .main) { [weak self] note in
+            guard let raw = note.object as? String, let cmd = PlacementCommand(rawValue: raw) else { return }
+            MainActor.assumeIsolated {
+                self?.applyPlacement(cmd)
+                self?.hotkeyManager.exitPlacementMode()
+            }
+        }
+        NSLog("Tessellate: debug triggers installed")
+        #endif
     }
 
     /// Re-derive an automatic grid when displays change (resolution, arrangement,

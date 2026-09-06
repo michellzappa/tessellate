@@ -5,6 +5,9 @@ options:
     macOS: "13.0"
   createIntermediateGroups: true
   groupSortPosition: top
+configs:
+  Debug: debug
+  Release: release
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -18,6 +21,12 @@ settings:
     PROVISIONING_PROFILE_SPECIFIER: ""
     ENABLE_HARDENED_RUNTIME: YES
     GENERATE_INFOPLIST_FILE: NO
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
 targets:
   Tessellate:
     type: application
