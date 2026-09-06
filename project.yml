@@ -1,0 +1,49 @@
+name: Tessellate
+options:
+  bundleIdPrefix: app.tessellate
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: YES
+    GENERATE_INFOPLIST_FILE: NO
+targets:
+  Tessellate:
+    type: application
+    platform: macOS
+    sources:
+      - path: Tessellate
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/Tessellate.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.tessellate.Tessellate
+        PRODUCT_NAME: Tessellate
+        CODE_SIGN_ENTITLEMENTS: Tessellate/Resources/Tessellate.entitlements
+        INFOPLIST_FILE: Tessellate/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        COMBINE_HIDPI_IMAGES: YES
+        ENABLE_PREVIEWS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+schemes:
+  Tessellate:
+    build:
+      targets:
+        Tessellate: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
