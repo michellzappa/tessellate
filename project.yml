@@ -9,8 +9,13 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
-    CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: ""
+    # Sign with a real identity, not ad-hoc: TCC keys the Accessibility grant to
+    # the code signature, so an ad-hoc build loses the permission on every
+    # rebuild. Manual signing avoids needing a "Mac Development" cert.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: Apple Development
+    DEVELOPMENT_TEAM: 992N457T8D
+    PROVISIONING_PROFILE_SPECIFIER: ""
     ENABLE_HARDENED_RUNTIME: YES
     GENERATE_INFOPLIST_FILE: NO
 targets:

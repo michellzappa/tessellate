@@ -31,6 +31,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     func start() {
+        NSLog("Tessellate: starting pid=\(ProcessInfo.processInfo.processIdentifier) exe=\(Bundle.main.executablePath ?? "?")")
         hotkeyManager.onActivation = { [weak self] in
             self?.handleActivation()
         }

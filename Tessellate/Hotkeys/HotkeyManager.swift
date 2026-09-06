@@ -99,7 +99,9 @@ final class HotkeyManager: ObservableObject {
             UInt32(layout.activationKeyCode),
             UInt32(layout.activationModifiers),
             hotKeyID,
-            GetApplicationEventTarget(),
+            // Must match the target the handler above is installed on, or the
+            // hotkey fires into a target with no handler and nothing happens.
+            GetEventDispatcherTarget(),
             0,
             &ref
         )
