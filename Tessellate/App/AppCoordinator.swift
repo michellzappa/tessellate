@@ -69,6 +69,17 @@ final class AppCoordinator: ObservableObject {
                 self?.hotkeyManager.exitPlacementMode()
             }
         }
+        center.addObserver(forName: .init("app.tessellate.debug.grid"), object: nil, queue: .main) { [weak self] note in
+            guard let parts = (note.object as? String)?.split(separator: "x"),
+                  parts.count == 2, let c = Int(parts[0]), let r = Int(parts[1]) else { return }
+            MainActor.assumeIsolated {
+                self?.store.update {
+                    $0.gridDensity = .custom
+                    $0.resizeGrid(to: GridDimensions(columns: c, rows: r))
+                }
+                NSLog("Tessellate: debug grid -> \(c)x\(r)")
+            }
+        }
         NSLog("Tessellate: debug triggers installed")
         #endif
     }
@@ -170,8 +181,7 @@ final class AppCoordinator: ObservableObject {
             NSLog("Tessellate: applyPlacement — no focused window")
             return
         }
-        let gridRect = store.layout.rect(for: command).clamped(to: store.layout.grid)
-        let cgRect = ScreenGeometry.gridRect(gridRect, grid: store.layout.grid, on: target.screen)
+        let cgRect = ScreenGeometry.rect(store.layout.fraction(for: command), on: target.screen)
         let ok = WindowEngine.apply(cgRect, to: target.element)
         NSLog("Tessellate: apply \(command.rawValue) -> \(cgRect) on \(target.appName) ok=\(ok)")
     }

@@ -40,7 +40,7 @@ final class LayoutStore: ObservableObject {
     }
 
     func resetRect(_ command: PlacementCommand) {
-        update { $0.setRect(command.defaultRect(in: $0.grid), for: command) }
+        update { $0.setFraction(command.defaultFractionRect, for: command) }
     }
 
     func resetAll() {

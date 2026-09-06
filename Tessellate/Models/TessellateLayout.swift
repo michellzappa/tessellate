@@ -29,6 +29,11 @@ enum PlacementCommand: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    var defaultFractionRect: FractionRect {
+        let f = defaultFraction
+        return FractionRect(x: f.x, y: f.y, w: f.w, h: f.h)
+    }
+
     func defaultRect(in grid: GridDimensions) -> GridRect {
         let f = defaultFraction
         // Round both edges, not position and size separately, so margins stay symmetric.
@@ -53,6 +58,60 @@ enum PlacementCommand: String, CaseIterable, Codable, Identifiable {
     static func fromIndex(_ index: Int) -> PlacementCommand? {
         guard index >= 0, index < allCases.count else { return nil }
         return allCases[index]
+    }
+}
+
+/// A placement target as a fraction of the usable screen. This is the stored
+/// form: the grid is only a snapping aid for editing, so changing grid size can
+/// never move a target. Storing grid cells and rescaling them on every grid
+/// change accumulated rounding error until "center" was visibly off-centre.
+struct FractionRect: Codable, Equatable {
+    var x: Double
+    var y: Double
+    var w: Double
+    var h: Double
+
+    init(x: Double, y: Double, w: Double, h: Double) {
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+    }
+
+    /// Round-trips through grid cells, for editing on the grid.
+    init(gridRect r: GridRect, grid: GridDimensions) {
+        let cols = Double(max(1, grid.columns))
+        let rows = Double(max(1, grid.rows))
+        self.init(
+            x: Double(r.x) / cols,
+            y: Double(r.y) / rows,
+            w: Double(r.w) / cols,
+            h: Double(r.h) / rows
+        )
+        self = clamped()
+    }
+
+    func clamped() -> FractionRect {
+        let cw = min(max(w, 0.01), 1)
+        let ch = min(max(h, 0.01), 1)
+        return FractionRect(
+            x: min(max(x, 0), 1 - cw),
+            y: min(max(y, 0), 1 - ch),
+            w: cw,
+            h: ch
+        )
+    }
+
+    func snapped(to grid: GridDimensions) -> GridRect {
+        let c = clamped()
+        let cols = Double(grid.columns)
+        let rows = Double(grid.rows)
+        return GridRect(
+            x: Int((c.x * cols).rounded()),
+            y: Int((c.y * rows).rounded()),
+            w: max(1, Int((c.w * cols).rounded())),
+            h: max(1, Int((c.h * rows).rounded()))
+        ).clamped(to: grid)
     }
 }
 
@@ -186,7 +245,7 @@ struct CommandBinding: Codable, Equatable {
 struct TessellateLayout: Codable, Equatable {
     var grid: GridDimensions
     var gridDensity: GridDensity
-    var rects: [String: GridRect]
+    var fractions: [String: FractionRect]
     var bindings: [String: CommandBinding]
     var activationKeyCode: UInt16
     var activationModifiers: UInt
@@ -196,12 +255,9 @@ struct TessellateLayout: Codable, Equatable {
     init() {
         self.grid = GridDimensions()
         self.gridDensity = .balanced
-        self.rects = [
-            PlacementCommand.left.rawValue: .defaultLeft,
-            PlacementCommand.right.rawValue: .defaultRight,
-            PlacementCommand.center.rawValue: .defaultCenter,
-            PlacementCommand.maximize.rawValue: .defaultMaximize
-        ]
+        self.fractions = Dictionary(
+            uniqueKeysWithValues: PlacementCommand.allCases.map { ($0.rawValue, $0.defaultFractionRect) }
+        )
         self.bindings = [
             PlacementCommand.left.rawValue: CommandBinding(keyCode: 123, modifiers: 0),
             PlacementCommand.right.rawValue: CommandBinding(keyCode: 124, modifiers: 0),
@@ -214,13 +270,26 @@ struct TessellateLayout: Codable, Equatable {
         self.launchAtLogin = false
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case grid, gridDensity, fractions, bindings
+        case activationKeyCode, activationModifiers, showMenuBarIcon, launchAtLogin
+        case rects  // legacy: grid cells, migrated to fractions on read
+    }
+
     // Layouts written before the density setting existed decode with defaults filled in.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let fallback = TessellateLayout()
         grid = try c.decodeIfPresent(GridDimensions.self, forKey: .grid) ?? fallback.grid
         gridDensity = try c.decodeIfPresent(GridDensity.self, forKey: .gridDensity) ?? fallback.gridDensity
-        rects = try c.decodeIfPresent([String: GridRect].self, forKey: .rects) ?? fallback.rects
+        if let stored = try c.decodeIfPresent([String: FractionRect].self, forKey: .fractions) {
+            fractions = stored
+        } else if let legacy = try c.decodeIfPresent([String: GridRect].self, forKey: .rects) {
+            let legacyGrid = grid
+            fractions = legacy.mapValues { FractionRect(gridRect: $0, grid: legacyGrid) }
+        } else {
+            fractions = fallback.fractions
+        }
         bindings = try c.decodeIfPresent([String: CommandBinding].self, forKey: .bindings) ?? fallback.bindings
         activationKeyCode = try c.decodeIfPresent(UInt16.self, forKey: .activationKeyCode) ?? fallback.activationKeyCode
         activationModifiers = try c.decodeIfPresent(UInt.self, forKey: .activationModifiers) ?? fallback.activationModifiers
@@ -228,36 +297,39 @@ struct TessellateLayout: Codable, Equatable {
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? fallback.launchAtLogin
     }
 
-    func rect(for command: PlacementCommand) -> GridRect {
-        (rects[command.rawValue] ?? command.defaultRect(in: grid)).clamped(to: grid)
+    // `rects` is decode-only, so encoding has to be written out explicitly.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(grid, forKey: .grid)
+        try c.encode(gridDensity, forKey: .gridDensity)
+        try c.encode(fractions, forKey: .fractions)
+        try c.encode(bindings, forKey: .bindings)
+        try c.encode(activationKeyCode, forKey: .activationKeyCode)
+        try c.encode(activationModifiers, forKey: .activationModifiers)
+        try c.encode(showMenuBarIcon, forKey: .showMenuBarIcon)
+        try c.encode(launchAtLogin, forKey: .launchAtLogin)
     }
 
-    /// Move to a new grid size, remapping every stored rect proportionally so the
-    /// commands keep pointing at the same region of the screen.
+    func fraction(for command: PlacementCommand) -> FractionRect {
+        (fractions[command.rawValue] ?? command.defaultFractionRect).clamped()
+    }
+
+    func rect(for command: PlacementCommand) -> GridRect {
+        fraction(for: command).snapped(to: grid)
+    }
+
+    /// Targets are stored as screen fractions, so changing the grid only changes
+    /// where they snap when edited — it never moves them.
     mutating func resizeGrid(to newGrid: GridDimensions) {
-        let old = grid
-        guard old != newGrid else { return }
-        guard old.columns > 0, old.rows > 0 else {
-            grid = newGrid
-            return
-        }
-        let sx = Double(newGrid.columns) / Double(old.columns)
-        let sy = Double(newGrid.rows) / Double(old.rows)
-        for command in PlacementCommand.allCases {
-            let r = rect(for: command)
-            // Scale both edges so margins stay symmetric after rounding.
-            let x = min(max(0, Int((Double(r.x) * sx).rounded())), newGrid.columns - 1)
-            let y = min(max(0, Int((Double(r.y) * sy).rounded())), newGrid.rows - 1)
-            let x2 = Int((Double(r.x + r.w) * sx).rounded())
-            let y2 = Int((Double(r.y + r.h) * sy).rounded())
-            rects[command.rawValue] = GridRect(x: x, y: y, w: max(1, x2 - x), h: max(1, y2 - y))
-                .clamped(to: newGrid)
-        }
         grid = newGrid
     }
 
     mutating func setRect(_ rect: GridRect, for command: PlacementCommand) {
-        rects[command.rawValue] = rect
+        fractions[command.rawValue] = FractionRect(gridRect: rect.clamped(to: grid), grid: grid)
+    }
+
+    mutating func setFraction(_ fraction: FractionRect, for command: PlacementCommand) {
+        fractions[command.rawValue] = fraction.clamped()
     }
 
     func binding(for command: PlacementCommand) -> CommandBinding? {

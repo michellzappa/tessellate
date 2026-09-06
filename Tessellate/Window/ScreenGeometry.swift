@@ -24,6 +24,23 @@ enum ScreenGeometry {
         return axRect(fromCocoa: ns)
     }
 
+    /// Placement uses the stored fraction directly rather than snapping through
+    /// grid cells, so the target is exact regardless of the current grid.
+    static func rect(
+        _ fraction: FractionRect,
+        on screen: NSScreen
+    ) -> CGRect {
+        let usable = usableFrame(for: screen)
+        let f = fraction.clamped()
+        let ns = CGRect(
+            x: usable.origin.x + f.x * usable.width,
+            y: usable.maxY - (f.y + f.h) * usable.height,
+            width: f.w * usable.width,
+            height: f.h * usable.height
+        )
+        return axRect(fromCocoa: ns)
+    }
+
     static func gridDims(for screen: NSScreen, grid: GridDimensions) -> (cellW: CGFloat, cellH: CGFloat) {
         let usable = usableFrame(for: screen)
         return (usable.width / CGFloat(grid.columns), usable.height / CGFloat(grid.rows))
