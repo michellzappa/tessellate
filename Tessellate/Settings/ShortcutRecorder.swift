@@ -27,10 +27,12 @@ struct ShortcutRecorder: NSViewRepresentable {
 }
 
 final class ShortcutRecorderView: NSView {
+    static weak var activeRecorder: ShortcutRecorderView?
+
     var onCapture: ((UInt16?, UInt) -> Void)?
     var placeholder: String = "Click to record"
     var displayText: String = ""
-    private var isRecording = false
+    var isRecording = false
     private var localKeyMonitor: Any?
 
     override var acceptsFirstResponder: Bool { true }
@@ -48,6 +50,9 @@ final class ShortcutRecorderView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     deinit {
+        if Self.activeRecorder === self {
+            Self.activeRecorder = nil
+        }
         stopLocalKeyMonitor()
     }
 
@@ -105,6 +110,7 @@ final class ShortcutRecorderView: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         isRecording = true
+        Self.activeRecorder = self
         startLocalKeyMonitor()
         needsDisplay = true
     }
@@ -120,7 +126,7 @@ final class ShortcutRecorderView: NSView {
         return true
     }
 
-    private func handleRecordedKey(_ event: NSEvent) {
+    func handleRecordedKey(_ event: NSEvent) {
         let code = UInt16(event.keyCode)
         if code == CarbonKeys.escape {
             stopRecording()
@@ -158,6 +164,9 @@ final class ShortcutRecorderView: NSView {
     private func stopRecording() {
         isRecording = false
         stopLocalKeyMonitor()
+        if Self.activeRecorder === self {
+            Self.activeRecorder = nil
+        }
         if window?.firstResponder === self {
             window?.makeFirstResponder(nil)
         }
@@ -166,8 +175,27 @@ final class ShortcutRecorderView: NSView {
     override func resignFirstResponder() -> Bool {
         isRecording = false
         stopLocalKeyMonitor()
+        if Self.activeRecorder === self {
+            Self.activeRecorder = nil
+        }
         needsDisplay = true
         return true
+    }
+}
+
+/// SwiftUI's hosting view can consume navigation keys such as Tab before they
+/// reach an embedded NSView. Route recording through the settings window too,
+/// so every keyDown has one reliable capture path.
+final class SettingsWindow: NSWindow {
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown,
+           let recorder = ShortcutRecorderView.activeRecorder,
+           recorder.window === self,
+           recorder.isRecording {
+            recorder.handleRecordedKey(event)
+            return
+        }
+        super.sendEvent(event)
     }
 }
 

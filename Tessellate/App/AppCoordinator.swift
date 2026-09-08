@@ -170,7 +170,7 @@ final class AppCoordinator: ObservableObject {
             SettingsView()
                 .environmentObject(self)
         )
-        let window = NSWindow(contentViewController: host)
+        let window = SettingsWindow(contentViewController: host)
         window.title = "Tessellate Settings"
         window.setContentSize(NSSize(width: 720, height: 640))
         window.styleMask = [.titled, .closable, .miniaturizable]

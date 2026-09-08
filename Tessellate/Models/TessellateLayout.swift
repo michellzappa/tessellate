@@ -11,7 +11,9 @@ struct PlacementCommand: Codable, Equatable, Hashable, Identifiable {
     var binding: CommandBinding?
 
     var displayName: String {
-        name.isEmpty ? "Untitled Command" : name
+        name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Untitled Command"
+            : name
     }
 
     /// The starting zone used by the Reset action. Built-in IDs retain their
@@ -342,8 +344,7 @@ struct TessellateLayout: Codable, Equatable {
 
     mutating func renameCommand(_ commandID: String, to name: String) {
         guard let index = commands.firstIndex(where: { $0.id == commandID }) else { return }
-        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        commands[index].name = cleaned.isEmpty ? "Untitled Command" : cleaned
+        commands[index].name = name
     }
 
     mutating func addCommand(id: String, name: String = "New Command") {

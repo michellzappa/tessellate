@@ -83,7 +83,7 @@ private struct CommandsSection: View {
                                     .buttonStyle(.plain)
 
                                     TextField(
-                                        "Command name",
+                                        "",
                                         text: nameBinding(for: command.id)
                                     )
                                     .textFieldStyle(.plain)
