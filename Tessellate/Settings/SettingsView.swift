@@ -270,7 +270,7 @@ private struct CommandsSection: View {
             get: { store.layout.command(withID: commandID)?.binding?.modifiers ?? 0 },
             set: { newMods in
                 store.update {
-                    guard let keyCode = $0.command(withID: commandID)?.binding?.keyCode, keyCode != 0 else { return }
+                    guard let keyCode = $0.command(withID: commandID)?.binding?.keyCode else { return }
                     $0.setBinding(CommandBinding(keyCode: keyCode, modifiers: newMods), for: commandID)
                 }
             }

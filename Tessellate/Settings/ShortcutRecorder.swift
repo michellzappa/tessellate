@@ -36,6 +36,7 @@ final class ShortcutRecorderView: NSView {
     private var localKeyMonitor: Any?
 
     override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { true }
     override var isFlipped: Bool { true }
 
     private var isHovered = false
@@ -108,9 +109,9 @@ final class ShortcutRecorderView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
         isRecording = true
         Self.activeRecorder = self
+        window?.makeFirstResponder(self)
         startLocalKeyMonitor()
         needsDisplay = true
     }
@@ -161,7 +162,7 @@ final class ShortcutRecorderView: NSView {
         }
     }
 
-    private func stopRecording() {
+    func cancelRecording() {
         isRecording = false
         stopLocalKeyMonitor()
         if Self.activeRecorder === self {
@@ -172,12 +173,11 @@ final class ShortcutRecorderView: NSView {
         }
     }
 
+    private func stopRecording() {
+        cancelRecording()
+    }
+
     override func resignFirstResponder() -> Bool {
-        isRecording = false
-        stopLocalKeyMonitor()
-        if Self.activeRecorder === self {
-            Self.activeRecorder = nil
-        }
         needsDisplay = true
         return true
     }
@@ -188,6 +188,14 @@ final class ShortcutRecorderView: NSView {
 /// so every keyDown has one reliable capture path.
 final class SettingsWindow: NSWindow {
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown,
+           let recorder = ShortcutRecorderView.activeRecorder,
+           recorder.window === self,
+           let contentView,
+           !recorder.convert(recorder.bounds, to: contentView)
+                .contains(contentView.convert(event.locationInWindow, from: nil)) {
+            recorder.cancelRecording()
+        }
         if event.type == .keyDown,
            let recorder = ShortcutRecorderView.activeRecorder,
            recorder.window === self,
