@@ -20,8 +20,7 @@ struct SettingsView: View {
                 }
             }
 
-            ZonesSection(selection: $selection)
-            KeysSection(selection: $selection)
+            CommandsSection(selection: $selection)
             GeneralSection()
             AboutSection()
         }
@@ -30,21 +29,48 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Zones
+// MARK: - Commands
 
-private struct ZonesSection: View {
+private struct CommandsSection: View {
     @Binding var selection: PlacementCommand
+    @EnvironmentObject var coordinator: AppCoordinator
     @ObservedObject private var store = LayoutStore.shared
 
     var body: some View {
         Section {
-            Picker("Zone", selection: $selection) {
+            LabeledContent("Activate") {
+                ShortcutRecorder(
+                    keyCode: Binding(
+                        get: { store.layout.activationKeyCode },
+                        set: { newCode in store.update { $0.activationKeyCode = newCode } }
+                    ),
+                    modifiers: Binding(
+                        get: { store.layout.activationModifiers },
+                        set: { newMods in store.update { $0.activationModifiers = newMods } }
+                    ),
+                    placeholder: "Record"
+                )
+                .frame(width: 116, height: 24)
+            }
+
+            Divider()
+
+            Picker("Command", selection: $selection) {
                 ForEach(PlacementCommand.allCases) { command in
                     Text(command.displayName).tag(command)
                 }
             }
             .pickerStyle(.inline)
             .labelsHidden()
+
+            LabeledContent("Shortcut") {
+                ShortcutRecorder(
+                    keyCode: keyCodeBinding(selection),
+                    modifiers: modifiersBinding(selection),
+                    placeholder: "Unbound"
+                )
+                .frame(width: 116, height: 24)
+            }
 
             ZoneCanvas(
                 grid: store.layout.grid,
@@ -72,9 +98,9 @@ private struct ZonesSection: View {
                 .disabled(isDefault)
             }
         } header: {
-            Text("Zones")
+            Text("Commands")
         } footer: {
-            Text("Drag on the map to set where **\(selection.displayName)** puts a window. The other zones are outlined for reference.")
+            Text("Choose a command to edit both its shortcut and zone. Drag on the map to set where **\(selection.displayName)** puts a window. Esc cancels placement mode, and Delete clears a shortcut.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -92,56 +118,6 @@ private struct ZonesSection: View {
         let w = Int((f.w * usable.width).rounded())
         let h = Int((f.h * usable.height).rounded())
         return "\(percent)  ·  \(w) × \(h) pt"
-    }
-}
-
-
-// MARK: - Keys
-
-private struct KeysSection: View {
-    @Binding var selection: PlacementCommand
-    @EnvironmentObject var coordinator: AppCoordinator
-    @ObservedObject private var store = LayoutStore.shared
-
-    var body: some View {
-        Section {
-            LabeledContent("Activate") {
-                ShortcutRecorder(
-                    keyCode: Binding(
-                        get: { store.layout.activationKeyCode },
-                        set: { newCode in store.update { $0.activationKeyCode = newCode } }
-                    ),
-                    modifiers: Binding(
-                        get: { store.layout.activationModifiers },
-                        set: { newMods in store.update { $0.activationModifiers = newMods } }
-                    ),
-                    placeholder: "Record"
-                )
-                .frame(width: 116, height: 24)
-            }
-
-            ForEach(PlacementCommand.allCases) { command in
-                LabeledContent {
-                    ShortcutRecorder(
-                        keyCode: keyCodeBinding(command),
-                        modifiers: modifiersBinding(command),
-                        placeholder: "Unbound"
-                    )
-                    .frame(width: 116, height: 24)
-                } label: {
-                    Text(command.displayName)
-                        .foregroundStyle(command == selection ? Color.accentColor : .primary)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { selection = command }
-            }
-        } header: {
-            Text("Keys")
-        } footer: {
-            Text("Press the activation key, then a zone key — ⌥Space then ← by default. Esc cancels, and placement mode ends by itself after \(Int(coordinator.hotkeyManager.placementTimeout)) seconds. Delete clears a binding.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
     }
 
     private func keyCodeBinding(_ command: PlacementCommand) -> Binding<UInt16> {

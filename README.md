@@ -78,12 +78,10 @@ name.
 
 Settings lives in the menu bar item.
 
-**Zones** — one map of the screen for all four commands. Pick a command, drag
-on the map to set where it puts a window; the other three stay outlined for
-reference.
-
-**Keys** — the activation key and the four command keys in one list. Press
-Delete while recording to clear a binding.
+**Commands** — choose a command once, then edit its shortcut and target zone
+together. The shared map keeps the other zones outlined for reference, and the
+activation shortcut lives at the top of the same section. Press Delete while
+recording to clear a binding.
 
 **General** — launch at login, and the grid. The grid is a snapping aid for
 editing, nothing more. Targets are stored as fractions of the usable screen, so
