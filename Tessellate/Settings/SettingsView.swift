@@ -2,11 +2,8 @@ import SwiftUI
 
 /// One scrolling page instead of three tabs.
 ///
-/// The old layout split things that are really one decision: a command's target
-/// region lived on the Commands tab, its key on the same tab but in a separate
-/// card, and a read-only picture of all four regions on General. Here the
-/// regions share a single canvas, the keys share a single list, and everything
-/// else is one short General section.
+/// Each command is edited as one decision: choose it in the left column, then
+/// adjust its shortcut and target region together in the detail column.
 struct SettingsView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @ObservedObject private var store = LayoutStore.shared
@@ -25,7 +22,7 @@ struct SettingsView: View {
             AboutSection()
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 680)
+        .frame(width: 720, height: 640)
     }
 }
 
@@ -55,47 +52,73 @@ private struct CommandsSection: View {
 
             Divider()
 
-            Picker("Command", selection: $selection) {
-                ForEach(PlacementCommand.allCases) { command in
-                    Text(command.displayName).tag(command)
-                }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
+            HStack(alignment: .top, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Command")
+                        .font(.headline)
 
-            LabeledContent("Shortcut") {
-                ShortcutRecorder(
-                    keyCode: keyCodeBinding(selection),
-                    modifiers: modifiersBinding(selection),
-                    placeholder: "Unbound"
-                )
-                .frame(width: 116, height: 24)
-            }
-
-            ZoneCanvas(
-                grid: store.layout.grid,
-                rects: Dictionary(
-                    uniqueKeysWithValues: PlacementCommand.allCases.map {
-                        ($0, store.layout.rect(for: $0))
+                    VStack(spacing: 2) {
+                        ForEach(PlacementCommand.allCases) { command in
+                            Button {
+                                selection = command
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: command == selection
+                                          ? "largecircle.fill.circle"
+                                          : "circle")
+                                    Text(command.displayName)
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(Rectangle())
+                                .padding(.vertical, 5)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(command == selection ? Color.accentColor : .primary)
+                            .accessibilityAddTraits(command == selection ? .isSelected : [])
+                        }
                     }
-                ),
-                selection: selection,
-                onEdit: { newRect in
-                    store.update { $0.setRect(newRect, for: selection) }
                 }
-            )
-            .frame(maxHeight: 260)
+                .frame(width: 150, alignment: .leading)
 
-            HStack {
-                Text(sizeSummary)
-                    .font(.callout)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Reset \(selection.displayName)") {
-                    store.update { $0.setFraction(selection.defaultFractionRect, for: selection) }
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    LabeledContent("Shortcut") {
+                        ShortcutRecorder(
+                            keyCode: keyCodeBinding(selection),
+                            modifiers: modifiersBinding(selection),
+                            placeholder: "Unbound"
+                        )
+                        .frame(width: 116, height: 24)
+                    }
+
+                    ZoneCanvas(
+                        grid: store.layout.grid,
+                        rects: Dictionary(
+                            uniqueKeysWithValues: PlacementCommand.allCases.map {
+                                ($0, store.layout.rect(for: $0))
+                            }
+                        ),
+                        selection: selection,
+                        onEdit: { newRect in
+                            store.update { $0.setRect(newRect, for: selection) }
+                        }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: 260)
+
+                    HStack {
+                        Text(sizeSummary)
+                            .font(.callout)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Reset") {
+                            store.update { $0.setFraction(selection.defaultFractionRect, for: selection) }
+                        }
+                        .disabled(isDefault)
+                    }
                 }
-                .disabled(isDefault)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         } header: {
             Text("Commands")

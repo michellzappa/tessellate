@@ -29,7 +29,7 @@ a command key:
 Placement mode expires after 2 seconds if you don't press anything, and a second
 press of the activation hotkey cancels it.
 
-Both the activation hotkey and all four command keys are rebindable in Settings.
+Both the activation hotkey and all command keys are rebindable in Settings.
 The activation hotkey may share a key with a command — ⌃Space to activate and
 Space to center is a perfectly good setup.
 
@@ -106,7 +106,7 @@ Roughly 2,100 lines of Swift, no dependencies.
 | `Window/WindowEngine` | Accessibility API: find the focused window, read and set its frame |
 | `Window/ScreenGeometry` | Cocoa ↔ Accessibility coordinate conversion, and fraction → screen rect |
 | `Overlay/FocusIndicator` | The outline around the window that is about to move |
-| `Settings/*` | The settings window: one page — zone map, keys, general, about |
+| `Settings/*` | The settings window: one page — command editor, general, about |
 | `Models/TessellateLayout` | Targets, bindings, grid; persisted to `UserDefaults` |
 | `App/AppCoordinator` | Wires the above together |
 
