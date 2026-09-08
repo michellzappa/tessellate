@@ -12,12 +12,11 @@ final class LayoutStore: ObservableObject {
     @Published var layout: TessellateLayout
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: defaultsKey),
-           let decoded = try? JSONDecoder().decode(TessellateLayout.self, from: data) {
-            self.layout = decoded
-        } else {
-            self.layout = TessellateLayout()
-        }
+        let storedLayout: TessellateLayout? = {
+            guard let data = UserDefaults.standard.data(forKey: "tessellate.layout.v1") else { return nil }
+            return try? JSONDecoder().decode(TessellateLayout.self, from: data)
+        }()
+        self.layout = storedLayout ?? TessellateLayout()
 
         $layout
             .dropFirst()
@@ -26,6 +25,12 @@ final class LayoutStore: ObservableObject {
                 self?.persist(new)
             }
             .store(in: &cancellables)
+
+        // Decode-time migrations, including repaired shortcut bindings, should
+        // become the user's new on-disk format immediately.
+        if storedLayout != nil {
+            persist(layout)
+        }
     }
 
     private func persist(_ layout: TessellateLayout) {

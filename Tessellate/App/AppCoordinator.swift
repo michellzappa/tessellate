@@ -170,10 +170,11 @@ final class AppCoordinator: ObservableObject {
             SettingsView()
                 .environmentObject(self)
         )
-        let window = SettingsWindow(contentViewController: host)
+        let window = NSWindow(contentViewController: host)
         window.title = "Tessellate Settings"
         window.setContentSize(NSSize(width: 720, height: 640))
-        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.contentMinSize = NSSize(width: 640, height: 560)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.identifier = NSUserInterfaceItemIdentifier("tessellate.settings")
         window.center()
         window.makeKeyAndOrderFront(nil)

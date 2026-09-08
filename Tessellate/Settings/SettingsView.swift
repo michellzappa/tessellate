@@ -21,7 +21,14 @@ struct SettingsView: View {
             AboutSection()
         }
         .formStyle(.grouped)
-        .frame(width: 720, height: 640)
+        .frame(
+            minWidth: 640,
+            idealWidth: 720,
+            maxWidth: .infinity,
+            minHeight: 560,
+            idealHeight: 640,
+            maxHeight: .infinity
+        )
     }
 }
 
@@ -50,11 +57,11 @@ private struct CommandsSection: View {
     var body: some View {
         Section {
             LabeledContent("Activate") {
-                ShortcutRecorder(
+                ShortcutPicker(
                     binding: activationBinding,
                     placeholder: "Record"
                 )
-                .frame(width: 116, height: 24)
+                .frame(width: 190, height: 24, alignment: .leading)
             }
 
             Divider()
@@ -164,11 +171,11 @@ private struct CommandsSection: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         LabeledContent("Shortcut") {
-                            ShortcutRecorder(
+                            ShortcutPicker(
                                 binding: commandBinding(command.id),
                                 placeholder: "Unbound"
                             )
-                            .frame(width: 116, height: 24)
+                            .frame(width: 190, height: 24, alignment: .leading)
                         }
 
                         ZoneCanvas(
@@ -180,6 +187,8 @@ private struct CommandsSection: View {
                             }
                         )
                         .frame(maxWidth: .infinity, maxHeight: 260)
+
+                        GridControls()
 
                         HStack {
                             Text(sizeSummary(for: command))
@@ -301,6 +310,84 @@ private struct CommandsSection: View {
     }
 }
 
+private struct GridControls: View {
+    @ObservedObject private var store = LayoutStore.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Grid density", selection: densityBinding) {
+                ForEach(GridDensity.allCases) { density in
+                    Text(density.displayName).tag(density)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if store.layout.gridDensity == .custom {
+                HStack(spacing: 16) {
+                    Stepper(value: columnsBinding, in: GridDimensions.bounds) {
+                        LabeledContent("Columns") {
+                            Text("\(store.layout.grid.columns)").monospacedDigit()
+                        }
+                    }
+                    Stepper(value: rowsBinding, in: GridDimensions.bounds) {
+                        LabeledContent("Rows") {
+                            Text("\(store.layout.grid.rows)").monospacedDigit()
+                        }
+                    }
+                }
+            }
+
+            let grid = store.layout.grid
+            let size = "\(grid.columns) × \(grid.rows)"
+            Text(store.layout.gridDensity.isAutomatic
+                 ? "\(size), sized from your display so cells stay square."
+                 : "\(size), used as-is. Cells may not be square.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var densityBinding: Binding<GridDensity> {
+        Binding(
+            get: { store.layout.gridDensity },
+            set: { newValue in
+                store.update { layout in
+                    layout.gridDensity = newValue
+                    if newValue.isAutomatic, let screen = NSScreen.main ?? NSScreen.screens.first {
+                        layout.resizeGrid(to: GridDimensions.proposed(for: screen, density: newValue))
+                    }
+                }
+            }
+        )
+    }
+
+    private var columnsBinding: Binding<Int> {
+        Binding(
+            get: { store.layout.grid.columns },
+            set: { newValue in
+                store.update {
+                    var grid = $0.grid
+                    grid.columns = min(max(newValue, GridDimensions.bounds.lowerBound), GridDimensions.bounds.upperBound)
+                    $0.resizeGrid(to: grid)
+                }
+            }
+        )
+    }
+
+    private var rowsBinding: Binding<Int> {
+        Binding(
+            get: { store.layout.grid.rows },
+            set: { newValue in
+                store.update {
+                    var grid = $0.grid
+                    grid.rows = min(max(newValue, GridDimensions.bounds.lowerBound), GridDimensions.bounds.upperBound)
+                    $0.resizeGrid(to: grid)
+                }
+            }
+        )
+    }
+}
+
 // MARK: - General
 
 private struct GeneralSection: View {
@@ -323,72 +410,9 @@ private struct GeneralSection: View {
                     .foregroundStyle(.secondary)
             }
 
-            Picker("Grid", selection: Binding(
-                get: { store.layout.gridDensity },
-                set: { newValue in
-                    store.update { layout in
-                        layout.gridDensity = newValue
-                        if newValue.isAutomatic, let screen = NSScreen.main ?? NSScreen.screens.first {
-                            layout.resizeGrid(to: GridDimensions.proposed(for: screen, density: newValue))
-                        }
-                    }
-                }
-            )) {
-                ForEach(GridDensity.allCases) { density in
-                    Text(density.displayName).tag(density)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            if store.layout.gridDensity == .custom {
-                Stepper(value: columnsBinding, in: GridDimensions.bounds) {
-                    LabeledContent("Columns") { Text("\(store.layout.grid.columns)").monospacedDigit() }
-                }
-                Stepper(value: rowsBinding, in: GridDimensions.bounds) {
-                    LabeledContent("Rows") { Text("\(store.layout.grid.rows)").monospacedDigit() }
-                }
-            }
         } header: {
             Text("General")
-        } footer: {
-            Text(gridFooter)
-                .font(.callout)
-                .foregroundStyle(.secondary)
         }
-    }
-
-    private var columnsBinding: Binding<Int> {
-        Binding(
-            get: { store.layout.grid.columns },
-            set: { newValue in
-                store.update {
-                    var g = $0.grid
-                    g.columns = min(max(newValue, GridDimensions.bounds.lowerBound), GridDimensions.bounds.upperBound)
-                    $0.resizeGrid(to: g)
-                }
-            }
-        )
-    }
-
-    private var rowsBinding: Binding<Int> {
-        Binding(
-            get: { store.layout.grid.rows },
-            set: { newValue in
-                store.update {
-                    var g = $0.grid
-                    g.rows = min(max(newValue, GridDimensions.bounds.lowerBound), GridDimensions.bounds.upperBound)
-                    $0.resizeGrid(to: g)
-                }
-            }
-        )
-    }
-
-    private var gridFooter: String {
-        let grid = store.layout.grid
-        let size = "\(grid.columns) × \(grid.rows)"
-        return store.layout.gridDensity.isAutomatic
-            ? "\(size), sized from your display so cells stay square. The grid only decides where dragging snaps — it never moves a zone you already set."
-            : "\(size), used as-is. Cells may not be square."
     }
 }
 

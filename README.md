@@ -97,16 +97,18 @@ Settings lives in the menu bar item.
 
 **Commands** — choose a command once, then edit its shortcut and target zone
 together. The shared map keeps the other zones outlined for reference, and the
-activation shortcut lives at the top of the same section. Press Delete while
-recording to clear a binding.
+activation shortcut lives at the top of the same section. Shortcuts are chosen
+from native key and modifier menus, including Tab and the arrow keys.
 
-**General** — launch at login, and the grid. The grid is a snapping aid for
-editing, nothing more. Targets are stored as fractions of the usable screen, so
-changing the grid changes only where your edits snap; it never moves an existing
-target. By default the grid size is derived from your display so cells come out
-roughly square, at a density you choose (Light / Balanced / Dense), and it is
-recomputed when the display configuration changes. You can set explicit column
-and row counts instead.
+The grid density and optional custom column/row counts sit directly below the
+map because the grid is a snapping aid for editing, nothing more. Targets are
+stored as fractions of the usable screen, so changing the grid changes only
+where your edits snap; it never moves an existing target. By default the grid
+size is derived from your display so cells come out roughly square, at a density
+you choose (Light / Balanced / Dense), and it is recomputed when the display
+configuration changes.
+
+**General** — launch at login and show/hide the menu bar icon.
 
 **About** — whether Accessibility is granted, and the full path of the running
 executable. The grant binds to one exact binary, and during development your

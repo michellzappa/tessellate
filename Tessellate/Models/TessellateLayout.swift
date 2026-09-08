@@ -315,6 +315,22 @@ struct TessellateLayout: Codable, Equatable {
         activationModifiers = try c.decodeIfPresent(UInt.self, forKey: .activationModifiers) ?? fallback.activationModifiers
         showMenuBarIcon = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? fallback.showMenuBarIcon
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? fallback.launchAtLogin
+        repairLegacyCommandBindingsIfNeeded()
+    }
+
+    /// Repairs the intermediate editable-command migration where the old
+    /// persisted list could leave Upper/Lower unbound and duplicate Up on
+    /// Maximize. The guard makes this a no-op for normal custom layouts.
+    private mutating func repairLegacyCommandBindingsIfNeeded() {
+        guard command(withID: "left")?.binding?.keyCode == CarbonKeys.upArrow,
+              command(withID: "upperHalf")?.binding == nil,
+              command(withID: "lowerHalf")?.binding == nil,
+              command(withID: "maximize")?.binding?.keyCode == CarbonKeys.upArrow else {
+            return
+        }
+        setBinding(CommandBinding(keyCode: CarbonKeys.upArrow, modifiers: 0), for: "upperHalf")
+        setBinding(CommandBinding(keyCode: CarbonKeys.downArrow, modifiers: 0), for: "lowerHalf")
+        setBinding(CommandBinding(keyCode: CarbonKeys.tab, modifiers: 0), for: "maximize")
     }
 
     func command(withID id: String) -> PlacementCommand? {
