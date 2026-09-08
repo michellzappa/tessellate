@@ -3,7 +3,7 @@ import AppKit
 import Carbon.HIToolbox
 
 struct ShortcutRecorder: NSViewRepresentable {
-    @Binding var keyCode: UInt16
+    @Binding var keyCode: UInt16?
     @Binding var modifiers: UInt
     var placeholder: String = "Click to record"
 
@@ -27,10 +27,11 @@ struct ShortcutRecorder: NSViewRepresentable {
 }
 
 final class ShortcutRecorderView: NSView {
-    var onCapture: ((UInt16, UInt) -> Void)?
+    var onCapture: ((UInt16?, UInt) -> Void)?
     var placeholder: String = "Click to record"
     var displayText: String = ""
     private var isRecording = false
+    private var localKeyMonitor: Any?
 
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { true }
@@ -45,6 +46,10 @@ final class ShortcutRecorderView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        stopLocalKeyMonitor()
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -100,37 +105,67 @@ final class ShortcutRecorderView: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         isRecording = true
+        startLocalKeyMonitor()
         needsDisplay = true
     }
 
     override func keyDown(with event: NSEvent) {
         if !isRecording { super.keyDown(with: event); return }
+        handleRecordedKey(event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard isRecording else { return super.performKeyEquivalent(with: event) }
+        handleRecordedKey(event)
+        return true
+    }
+
+    private func handleRecordedKey(_ event: NSEvent) {
         let code = UInt16(event.keyCode)
         if code == CarbonKeys.escape {
-            isRecording = false
-            window?.makeFirstResponder(nil)
+            stopRecording()
             needsDisplay = true
             return
         }
         if code == UInt16(kVK_Delete) || code == UInt16(kVK_ForwardDelete) {
-            isRecording = false
-            window?.makeFirstResponder(nil)
-            onCapture?(0, 0)
+            stopRecording()
+            onCapture?(nil, 0)
             needsDisplay = true
             return
         }
         let mods = carbonModifiers(event.modifierFlags)
-        let stripped = mods & ~(UInt(cmdKey | shiftKey | controlKey | optionKey))
-        if stripped != 0 || code != 0 {
-            isRecording = false
+        stopRecording()
+        onCapture?(code, mods)
+        needsDisplay = true
+    }
+
+    private func startLocalKeyMonitor() {
+        stopLocalKeyMonitor()
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.isRecording else { return event }
+            self.handleRecordedKey(event)
+            return nil
+        }
+    }
+
+    private func stopLocalKeyMonitor() {
+        if let localKeyMonitor {
+            NSEvent.removeMonitor(localKeyMonitor)
+            self.localKeyMonitor = nil
+        }
+    }
+
+    private func stopRecording() {
+        isRecording = false
+        stopLocalKeyMonitor()
+        if window?.firstResponder === self {
             window?.makeFirstResponder(nil)
-            onCapture?(code, mods)
-            needsDisplay = true
         }
     }
 
     override func resignFirstResponder() -> Bool {
         isRecording = false
+        stopLocalKeyMonitor()
         needsDisplay = true
         return true
     }
@@ -145,8 +180,8 @@ func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt {
     return mods
 }
 
-func displayString(keyCode: UInt16, modifiers: UInt) -> String {
-    if keyCode == 0 { return "" }
+func displayString(keyCode: UInt16?, modifiers: UInt) -> String {
+    guard let keyCode else { return "" }
     var parts: [String] = []
     if modifiers & UInt(controlKey) != 0 { parts.append("⌃") }
     if modifiers & UInt(optionKey) != 0 { parts.append("⌥") }

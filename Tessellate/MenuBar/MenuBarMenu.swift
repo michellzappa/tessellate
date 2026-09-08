@@ -2,12 +2,13 @@ import SwiftUI
 
 struct MenuBarMenu: View {
     @EnvironmentObject var coordinator: AppCoordinator
+    @ObservedObject private var store = LayoutStore.shared
 
     var body: some View {
         if coordinator.hotkeyManager.isInPlacementMode {
             Text("Placement mode — press a command key")
         }
-        ForEach(PlacementCommand.allCases) { command in
+        ForEach(store.layout.commands) { command in
             Button(command.displayName) {
                 coordinator.applyPlacement(command)
             }

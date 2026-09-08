@@ -150,9 +150,9 @@ final class AppCoordinator: ObservableObject {
             NSLog("Tessellate: applyPlacement — no focused window")
             return
         }
-        let cgRect = ScreenGeometry.rect(store.layout.fraction(for: command), on: target.screen)
+        let cgRect = ScreenGeometry.rect(command.fraction, on: target.screen)
         let ok = WindowEngine.apply(cgRect, to: target.element)
-        NSLog("Tessellate: apply \(command.rawValue) -> \(cgRect) on \(target.appName) ok=\(ok)")
+        NSLog("Tessellate: apply \(command.id) (\(command.displayName)) -> \(cgRect) on \(target.appName) ok=\(ok)")
     }
 
     func openSettings() {

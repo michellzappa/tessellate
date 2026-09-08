@@ -74,6 +74,23 @@ Note that the team ID is the one reported by `codesign -dv` on a signed
 artifact, which is not the identifier shown in parentheses in the certificate
 name.
 
+### Downloadable releases
+
+Push a tag that matches `CFBundleShortVersionString` (for example
+`v0.3.0`) to run `.github/workflows/release.yml`. The workflow builds a
+universal arm64/x86_64 app, signs it with Developer ID, notarizes it with
+Apple, staples the ticket, and publishes a ZIP plus `SHA256SUMS` to the GitHub
+Release.
+
+The workflow requires these GitHub Actions secrets:
+
+- `APPLE_TEAM_ID` — the Apple Developer team ID.
+- `APPLE_DEVELOPER_CERTIFICATE_P12_BASE64` and `APPLE_DEVELOPER_CERTIFICATE_PASSWORD` — a base64-encoded Developer ID Application certificate and its export password.
+- `APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, and `APPLE_API_PRIVATE_KEY_BASE64` — an App Store Connect API key and base64-encoded private `.p8` key for notarization.
+
+Never commit the certificate, private API key, or their passwords. Keep them in
+GitHub Actions secrets or an environment-specific secret manager.
+
 ## Configuration
 
 Settings lives in the menu bar item.
@@ -107,7 +124,7 @@ Roughly 2,100 lines of Swift, no dependencies.
 | `Window/ScreenGeometry` | Cocoa ↔ Accessibility coordinate conversion, and fraction → screen rect |
 | `Overlay/FocusIndicator` | The outline around the window that is about to move |
 | `Settings/*` | The settings window: one page — command editor, general, about |
-| `Models/TessellateLayout` | Targets, bindings, grid; persisted to `UserDefaults` |
+| `Models/TessellateLayout` | Editable commands and grid; persisted to `UserDefaults` |
 | `App/AppCoordinator` | Wires the above together |
 
 Two decisions worth knowing about if you read the code:

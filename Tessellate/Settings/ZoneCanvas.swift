@@ -2,14 +2,13 @@ import SwiftUI
 
 /// The single interactive map of the screen used everywhere in Settings.
 ///
-/// One canvas replaces the four per-command editors plus the read-only preview
-/// that used to sit in General: every zone is visible at once, and the selected
-/// one is the one you drag. Editing and previewing are the same surface, so
-/// there is nothing to keep in sync.
+/// One canvas keeps every zone visible at once, with the selected command as the
+/// one you drag. Editing and previewing are the same surface, so there is
+/// nothing to keep in sync.
 struct ZoneCanvas: View {
     let grid: GridDimensions
-    let rects: [PlacementCommand: GridRect]
-    let selection: PlacementCommand
+    let commands: [PlacementCommand]
+    let selection: PlacementCommand?
     /// Nil while the canvas is read-only (no drag handling).
     var onEdit: ((GridRect) -> Void)?
 
@@ -43,7 +42,7 @@ struct ZoneCanvas: View {
                 }
 
                 // Unselected zones stay as quiet outlines: context without noise.
-                ForEach(PlacementCommand.allCases.filter { $0 != selection }) { command in
+                ForEach(commands.filter { $0.id != selection?.id }) { command in
                     zoneFrame(rect(for: command), cellW: cellW, cellH: cellH) {
                         RoundedRectangle(cornerRadius: 5)
                             .strokeBorder(
@@ -53,25 +52,27 @@ struct ZoneCanvas: View {
                     }
                 }
 
-                let active = preview ?? rect(for: selection)
-                zoneFrame(active, cellW: cellW, cellH: cellH) {
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(Color.accentColor.opacity(preview == nil ? 0.22 : 0.3))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5)
-                                .strokeBorder(Color.accentColor, lineWidth: 2)
-                        )
-                        .overlay(
-                            Text(selection.displayName)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Color.accentColor)
-                                .padding(4)
-                                .lineLimit(1)
-                        )
+                if let selection {
+                    let active = preview ?? rect(for: selection)
+                    zoneFrame(active, cellW: cellW, cellH: cellH) {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color.accentColor.opacity(preview == nil ? 0.22 : 0.3))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                            )
+                            .overlay(
+                                Text(selection.displayName)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
+                                    .padding(4)
+                                    .lineLimit(1)
+                            )
+                    }
+                    .animation(.snappy(duration: 0.15), value: active)
                 }
-                .animation(.snappy(duration: 0.15), value: active)
 
-                if isEditable {
+                if isEditable, selection != nil {
                     Color.clear
                         .contentShape(Rectangle())
                         .gesture(dragGesture(cellW: cellW, cellH: cellH))
@@ -88,7 +89,7 @@ struct ZoneCanvas: View {
     }
 
     private func rect(for command: PlacementCommand) -> GridRect {
-        (rects[command] ?? command.defaultRect(in: grid)).clamped(to: grid)
+        command.fraction.snapped(to: grid)
     }
 
     private func zoneFrame<Content: View>(

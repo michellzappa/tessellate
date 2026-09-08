@@ -2,78 +2,77 @@ import AppKit
 import Foundation
 import Carbon.HIToolbox
 
-enum PlacementCommand: String, CaseIterable, Codable, Identifiable {
-    case left
-    case right
-    case center
-    case upperHalf
-    case lowerHalf
-    case maximize
-
-    var id: String { rawValue }
+/// A user-editable placement command. The ID is stable so renaming or reordering
+/// a command never changes its saved zone or shortcut.
+struct PlacementCommand: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    var name: String
+    var fraction: FractionRect
+    var binding: CommandBinding?
 
     var displayName: String {
-        switch self {
-        case .left: return "Left"
-        case .right: return "Right"
-        case .center: return "Center"
-        case .upperHalf: return "Upper Half"
-        case .lowerHalf: return "Lower Half"
-        case .maximize: return "Maximize"
-        }
+        name.isEmpty ? "Untitled Command" : name
     }
 
-    /// Target expressed as a fraction of the usable screen, so it survives any grid size.
-    var defaultFraction: (x: Double, y: Double, w: Double, h: Double) {
-        switch self {
-        case .left: return (0, 0, 0.5, 1)
-        case .right: return (0.5, 0, 0.5, 1)
-        case .center: return (0.125, 0, 0.75, 1)
-        case .upperHalf: return (0, 0, 1, 0.5)
-        case .lowerHalf: return (0, 0.5, 1, 0.5)
-        case .maximize: return (0, 0, 1, 1)
-        }
-    }
-
+    /// The starting zone used by the Reset action. Built-in IDs retain their
+    /// familiar defaults after migration; new commands reset to full screen.
     var defaultFractionRect: FractionRect {
-        let f = defaultFraction
-        return FractionRect(x: f.x, y: f.y, w: f.w, h: f.h)
-    }
-
-    func defaultRect(in grid: GridDimensions) -> GridRect {
-        let f = defaultFraction
-        // Round both edges, not position and size separately, so margins stay symmetric.
-        let x = Int((f.x * Double(grid.columns)).rounded())
-        let y = Int((f.y * Double(grid.rows)).rounded())
-        let x2 = Int(((f.x + f.w) * Double(grid.columns)).rounded())
-        let y2 = Int(((f.y + f.h) * Double(grid.rows)).rounded())
-        return GridRect(x: x, y: y, w: max(1, x2 - x), h: max(1, y2 - y)).clamped(to: grid)
-    }
-
-    var defaultRect: GridRect { defaultRect(in: .default) }
-
-    var index: Int {
-        switch self {
-        case .left: return 0
-        case .right: return 1
-        case .center: return 2
-        case .upperHalf: return 3
-        case .lowerHalf: return 4
-        case .maximize: return 5
+        switch id {
+        case "left": return FractionRect(x: 0, y: 0, w: 0.5, h: 1)
+        case "right": return FractionRect(x: 0.5, y: 0, w: 0.5, h: 1)
+        case "center": return FractionRect(x: 0.125, y: 0, w: 0.75, h: 1)
+        case "upperHalf": return FractionRect(x: 0, y: 0, w: 1, h: 0.5)
+        case "lowerHalf": return FractionRect(x: 0, y: 0.5, w: 1, h: 0.5)
+        case "maximize": return FractionRect(x: 0, y: 0, w: 1, h: 1)
+        default: return FractionRect(x: 0, y: 0, w: 1, h: 1)
         }
     }
 
-    static func fromIndex(_ index: Int) -> PlacementCommand? {
-        guard index >= 0, index < allCases.count else { return nil }
-        return allCases[index]
-    }
+    static let defaults: [PlacementCommand] = [
+        PlacementCommand(
+            id: "left",
+            name: "Left",
+            fraction: FractionRect(x: 0, y: 0, w: 0.5, h: 1),
+            binding: CommandBinding(keyCode: 123, modifiers: 0)
+        ),
+        PlacementCommand(
+            id: "right",
+            name: "Right",
+            fraction: FractionRect(x: 0.5, y: 0, w: 0.5, h: 1),
+            binding: CommandBinding(keyCode: 124, modifiers: 0)
+        ),
+        PlacementCommand(
+            id: "center",
+            name: "Center",
+            fraction: FractionRect(x: 0.125, y: 0, w: 0.75, h: 1),
+            binding: CommandBinding(keyCode: 49, modifiers: 0)
+        ),
+        PlacementCommand(
+            id: "upperHalf",
+            name: "Upper Half",
+            fraction: FractionRect(x: 0, y: 0, w: 1, h: 0.5),
+            binding: CommandBinding(keyCode: 126, modifiers: 0)
+        ),
+        PlacementCommand(
+            id: "lowerHalf",
+            name: "Lower Half",
+            fraction: FractionRect(x: 0, y: 0.5, w: 1, h: 0.5),
+            binding: CommandBinding(keyCode: 125, modifiers: 0)
+        ),
+        PlacementCommand(
+            id: "maximize",
+            name: "Maximize",
+            fraction: FractionRect(x: 0, y: 0, w: 1, h: 1),
+            binding: CommandBinding(keyCode: 48, modifiers: 0)
+        )
+    ]
 }
 
 /// A placement target as a fraction of the usable screen. This is the stored
 /// form: the grid is only a snapping aid for editing, so changing grid size can
 /// never move a target. Storing grid cells and rescaling them on every grid
 /// change accumulated rounding error until "center" was visibly off-centre.
-struct FractionRect: Codable, Equatable {
+struct FractionRect: Codable, Equatable, Hashable {
     var x: Double
     var y: Double
     var w: Double
@@ -240,7 +239,7 @@ struct GridDimensions: Codable, Equatable {
     }
 }
 
-struct CommandBinding: Codable, Equatable {
+struct CommandBinding: Codable, Equatable, Hashable {
     var keyCode: UInt16
     var modifiers: UInt
 
@@ -253,9 +252,8 @@ struct CommandBinding: Codable, Equatable {
 struct TessellateLayout: Codable, Equatable {
     var grid: GridDimensions
     var gridDensity: GridDensity
-    var fractions: [String: FractionRect]
-    var bindings: [String: CommandBinding]
-    var activationKeyCode: UInt16
+    var commands: [PlacementCommand]
+    var activationKeyCode: UInt16?
     var activationModifiers: UInt
     var showMenuBarIcon: Bool
     var launchAtLogin: Bool
@@ -263,17 +261,7 @@ struct TessellateLayout: Codable, Equatable {
     init() {
         self.grid = GridDimensions()
         self.gridDensity = .balanced
-        self.fractions = Dictionary(
-            uniqueKeysWithValues: PlacementCommand.allCases.map { ($0.rawValue, $0.defaultFractionRect) }
-        )
-        self.bindings = [
-            PlacementCommand.left.rawValue: CommandBinding(keyCode: 123, modifiers: 0),
-            PlacementCommand.right.rawValue: CommandBinding(keyCode: 124, modifiers: 0),
-            PlacementCommand.center.rawValue: CommandBinding(keyCode: 49, modifiers: 0),
-            PlacementCommand.upperHalf.rawValue: CommandBinding(keyCode: 126, modifiers: 0),
-            PlacementCommand.lowerHalf.rawValue: CommandBinding(keyCode: 125, modifiers: 0),
-            PlacementCommand.maximize.rawValue: CommandBinding(keyCode: 48, modifiers: 0)
-        ]
+        self.commands = PlacementCommand.defaults
         self.activationKeyCode = 49
         self.activationModifiers = UInt(optionKey)
         self.showMenuBarIcon = true
@@ -281,51 +269,54 @@ struct TessellateLayout: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case grid, gridDensity, fractions, bindings
+        case grid, gridDensity, commands, fractions, bindings
         case activationKeyCode, activationModifiers, showMenuBarIcon, launchAtLogin
         case rects  // legacy: grid cells, migrated to fractions on read
     }
 
-    // Layouts written before the density setting existed decode with defaults filled in.
+    // Layouts written before commands became editable are migrated into the
+    // default command list, preserving each saved zone and shortcut.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let fallback = TessellateLayout()
         grid = try c.decodeIfPresent(GridDimensions.self, forKey: .grid) ?? fallback.grid
         gridDensity = try c.decodeIfPresent(GridDensity.self, forKey: .gridDensity) ?? fallback.gridDensity
-        if let stored = try c.decodeIfPresent([String: FractionRect].self, forKey: .fractions) {
-            fractions = stored
-        } else if let legacy = try c.decodeIfPresent([String: GridRect].self, forKey: .rects) {
-            let legacyGrid = grid
-            fractions = legacy.mapValues { FractionRect(gridRect: $0, grid: legacyGrid) }
+        if let stored = try c.decodeIfPresent([PlacementCommand].self, forKey: .commands) {
+            commands = stored
         } else {
-            fractions = fallback.fractions
+            let storedFractions: [String: FractionRect]
+            if let fractions = try c.decodeIfPresent([String: FractionRect].self, forKey: .fractions) {
+                storedFractions = fractions
+            } else if let legacy = try c.decodeIfPresent([String: GridRect].self, forKey: .rects) {
+                let legacyGrid = grid
+                storedFractions = legacy.mapValues { FractionRect(gridRect: $0, grid: legacyGrid) }
+            } else {
+                storedFractions = [:]
+            }
+            let storedBindings = try c.decodeIfPresent([String: CommandBinding].self, forKey: .bindings)
+            commands = fallback.commands.map { command in
+                PlacementCommand(
+                    id: command.id,
+                    name: command.name,
+                    fraction: storedFractions[command.id]?.clamped() ?? command.fraction,
+                    binding: storedBindings.map { $0[command.id] } ?? command.binding
+                )
+            }
         }
-        bindings = try c.decodeIfPresent([String: CommandBinding].self, forKey: .bindings) ?? fallback.bindings
-        activationKeyCode = try c.decodeIfPresent(UInt16.self, forKey: .activationKeyCode) ?? fallback.activationKeyCode
+        if let storedActivationKeyCode = try c.decodeIfPresent(UInt16.self, forKey: .activationKeyCode) {
+            // Older builds used 0 as the unbound sentinel. Key code 0 is
+            // actually the A key, so only migrate the old sentinel here.
+            activationKeyCode = storedActivationKeyCode == 0 ? nil : storedActivationKeyCode
+        } else {
+            activationKeyCode = fallback.activationKeyCode
+        }
         activationModifiers = try c.decodeIfPresent(UInt.self, forKey: .activationModifiers) ?? fallback.activationModifiers
         showMenuBarIcon = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? fallback.showMenuBarIcon
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? fallback.launchAtLogin
     }
 
-    // `rects` is decode-only, so encoding has to be written out explicitly.
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(grid, forKey: .grid)
-        try c.encode(gridDensity, forKey: .gridDensity)
-        try c.encode(fractions, forKey: .fractions)
-        try c.encode(bindings, forKey: .bindings)
-        try c.encode(activationKeyCode, forKey: .activationKeyCode)
-        try c.encode(activationModifiers, forKey: .activationModifiers)
-        try c.encode(showMenuBarIcon, forKey: .showMenuBarIcon)
-        try c.encode(launchAtLogin, forKey: .launchAtLogin)
-    }
-
-    func fraction(for command: PlacementCommand) -> FractionRect {
-        (fractions[command.rawValue] ?? command.defaultFractionRect).clamped()
-    }
-
-    func rect(for command: PlacementCommand) -> GridRect {
-        fraction(for: command).snapped(to: grid)
+    func command(withID id: String) -> PlacementCommand? {
+        commands.first { $0.id == id }
     }
 
     /// Targets are stored as screen fractions, so changing the grid only changes
@@ -334,24 +325,69 @@ struct TessellateLayout: Codable, Equatable {
         grid = newGrid
     }
 
-    mutating func setRect(_ rect: GridRect, for command: PlacementCommand) {
-        fractions[command.rawValue] = FractionRect(gridRect: rect.clamped(to: grid), grid: grid)
+    mutating func setRect(_ rect: GridRect, for commandID: String) {
+        guard let index = commands.firstIndex(where: { $0.id == commandID }) else { return }
+        commands[index].fraction = FractionRect(gridRect: rect.clamped(to: grid), grid: grid)
     }
 
-    mutating func setFraction(_ fraction: FractionRect, for command: PlacementCommand) {
-        fractions[command.rawValue] = fraction.clamped()
+    mutating func setFraction(_ fraction: FractionRect, for commandID: String) {
+        guard let index = commands.firstIndex(where: { $0.id == commandID }) else { return }
+        commands[index].fraction = fraction.clamped()
     }
 
-    func binding(for command: PlacementCommand) -> CommandBinding? {
-        bindings[command.rawValue]
+    mutating func setBinding(_ binding: CommandBinding?, for commandID: String) {
+        guard let index = commands.firstIndex(where: { $0.id == commandID }) else { return }
+        commands[index].binding = binding
     }
 
-    mutating func setBinding(_ binding: CommandBinding?, for command: PlacementCommand) {
-        if let binding {
-            bindings[command.rawValue] = binding
-        } else {
-            bindings.removeValue(forKey: command.rawValue)
+    mutating func renameCommand(_ commandID: String, to name: String) {
+        guard let index = commands.firstIndex(where: { $0.id == commandID }) else { return }
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        commands[index].name = cleaned.isEmpty ? "Untitled Command" : cleaned
+    }
+
+    mutating func addCommand(id: String, name: String = "New Command") {
+        let baseName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "New Command"
+            : name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var uniqueName = baseName
+        var suffix = 2
+        while commands.contains(where: { $0.displayName == uniqueName }) {
+            uniqueName = "\(baseName) \(suffix)"
+            suffix += 1
         }
+        commands.append(
+            PlacementCommand(
+                id: id,
+                name: uniqueName,
+                fraction: FractionRect(x: 0, y: 0, w: 1, h: 1),
+                binding: nil
+            )
+        )
+    }
+
+    mutating func removeCommand(withID id: String) {
+        commands.removeAll { $0.id == id }
+    }
+
+    mutating func moveCommand(withID id: String, by offset: Int) {
+        guard let index = commands.firstIndex(where: { $0.id == id }) else { return }
+        let newIndex = index + offset
+        guard commands.indices.contains(newIndex) else { return }
+        commands.swapAt(index, newIndex)
+    }
+
+    // `rects` and the parallel `fractions`/`bindings` maps are decode-only
+    // legacy formats. New writes use the editable command list.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(grid, forKey: .grid)
+        try c.encode(gridDensity, forKey: .gridDensity)
+        try c.encode(commands, forKey: .commands)
+        try c.encode(activationKeyCode, forKey: .activationKeyCode)
+        try c.encode(activationModifiers, forKey: .activationModifiers)
+        try c.encode(showMenuBarIcon, forKey: .showMenuBarIcon)
+        try c.encode(launchAtLogin, forKey: .launchAtLogin)
     }
 }
 

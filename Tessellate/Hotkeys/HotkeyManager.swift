@@ -95,8 +95,12 @@ final class HotkeyManager: ObservableObject {
         let layout = store.layout
         let hotKeyID = EventHotKeyID(signature: HotkeySignature.activation, id: 1)
         var ref: EventHotKeyRef?
+        guard let activationKeyCode = layout.activationKeyCode else {
+            NSLog("Tessellate: activation hotkey is unbound")
+            return
+        }
         let status = RegisterEventHotKey(
-            UInt32(layout.activationKeyCode),
+            UInt32(activationKeyCode),
             UInt32(layout.activationModifiers),
             hotKeyID,
             // Must match the target the handler above is installed on, or the
@@ -107,7 +111,7 @@ final class HotkeyManager: ObservableObject {
         )
         if status == noErr {
             activationRef = ref
-            NSLog("Tessellate: activation hotkey registered (keyCode=\(layout.activationKeyCode) mods=\(layout.activationModifiers))")
+            NSLog("Tessellate: activation hotkey registered (keyCode=\(activationKeyCode) mods=\(layout.activationModifiers))")
         } else {
             activationRef = nil
             NSLog("Tessellate: activation hotkey FAILED to register status=\(status)")
@@ -238,11 +242,11 @@ final class HotkeyManager: ObservableObject {
 
         var matched = false
         defer { if !matched { NSLog("Tessellate: no command bound to key=\(keyCode) mods=\(carbonMods)") } }
-        for command in PlacementCommand.allCases {
-            guard let binding = store.layout.binding(for: command), binding.keyCode != 0 else { continue }
+        for command in store.layout.commands {
+            guard let binding = command.binding else { continue }
             if binding.keyCode == keyCode && binding.modifiers == carbonMods {
                 matched = true
-                NSLog("Tessellate: matched \(command.rawValue)")
+                NSLog("Tessellate: matched \(command.id) (\(command.displayName))")
                 // onCommand first: exitPlacementMode fires onExit, which clears
                 // the window captured at activation.
                 onCommand(command)

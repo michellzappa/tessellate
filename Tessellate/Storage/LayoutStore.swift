@@ -40,8 +40,11 @@ final class LayoutStore: ObservableObject {
         layout = copy
     }
 
-    func resetRect(_ command: PlacementCommand) {
-        update { $0.setFraction(command.defaultFractionRect, for: command) }
+    func resetRect(_ commandID: String) {
+        update {
+            guard let command = $0.command(withID: commandID) else { return }
+            $0.setFraction(command.defaultFractionRect, for: commandID)
+        }
     }
 
     func resetAll() {

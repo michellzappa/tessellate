@@ -6,8 +6,7 @@ import SwiftUI
 /// adjust its shortcut and target region together in the detail column.
 struct SettingsView: View {
     @EnvironmentObject var coordinator: AppCoordinator
-    @ObservedObject private var store = LayoutStore.shared
-    @State private var selection: PlacementCommand = .left
+    @State private var selectionID: String? = "left"
 
     var body: some View {
         Form {
@@ -17,7 +16,7 @@ struct SettingsView: View {
                 }
             }
 
-            CommandsSection(selection: $selection)
+            CommandsSection(selectionID: $selectionID)
             GeneralSection()
             AboutSection()
         }
@@ -29,9 +28,22 @@ struct SettingsView: View {
 // MARK: - Commands
 
 private struct CommandsSection: View {
-    @Binding var selection: PlacementCommand
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Binding var selectionID: String?
     @ObservedObject private var store = LayoutStore.shared
+
+    private var commands: [PlacementCommand] { store.layout.commands }
+
+    private var selectedCommand: PlacementCommand? {
+        guard let selectedID else { return commands.first }
+        return commands.first { $0.id == selectedID } ?? commands.first
+    }
+
+    private var selectedID: String? {
+        guard let selectionID, commands.contains(where: { $0.id == selectionID }) else {
+            return commands.first?.id
+        }
+        return selectionID
+    }
 
     var body: some View {
         Section {
@@ -52,89 +64,183 @@ private struct CommandsSection: View {
 
             Divider()
 
-            HStack(alignment: .top, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Command")
-                        .font(.headline)
+            if let command = selectedCommand {
+                HStack(alignment: .top, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Command")
+                            .font(.headline)
 
-                    VStack(spacing: 2) {
-                        ForEach(PlacementCommand.allCases) { command in
-                            Button {
-                                selection = command
-                            } label: {
+                        VStack(spacing: 2) {
+                            ForEach(commands) { command in
                                 HStack(spacing: 8) {
-                                    Image(systemName: command == selection
-                                          ? "largecircle.fill.circle"
-                                          : "circle")
-                                    Text(command.displayName)
+                                    Button {
+                                        selectionID = command.id
+                                    } label: {
+                                        Image(systemName: command.id == selectedID
+                                              ? "largecircle.fill.circle"
+                                              : "circle")
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    TextField(
+                                        "Command name",
+                                        text: nameBinding(for: command.id)
+                                    )
+                                    .textFieldStyle(.plain)
+                                    .onTapGesture { selectionID = command.id }
+
                                     Spacer(minLength: 0)
                                 }
                                 .contentShape(Rectangle())
                                 .padding(.vertical, 5)
+                                .foregroundStyle(command.id == selectedID ? Color.accentColor : .primary)
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel(command.displayName)
+                                .accessibilityAddTraits(command.id == selectedID ? .isSelected : [])
+                                .contextMenu {
+                                    Button("Move Up") { move(command.id, by: -1) }
+                                        .disabled(!canMove(command.id, by: -1))
+                                    Button("Move Down") { move(command.id, by: 1) }
+                                        .disabled(!canMove(command.id, by: 1))
+                                    Divider()
+                                    Button("Delete Command", role: .destructive) {
+                                        delete(command.id)
+                                    }
+                                }
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(command == selection ? Color.accentColor : .primary)
-                            .accessibilityAddTraits(command == selection ? .isSelected : [])
                         }
+
+                        HStack(spacing: 10) {
+                            Button {
+                                addCommand()
+                            } label: {
+                                Label("Add", systemImage: "plus")
+                            }
+                            .buttonStyle(.borderless)
+
+                            Button {
+                                if let selectedID { move(selectedID, by: -1) }
+                            } label: {
+                                Image(systemName: "chevron.up")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(selectedID.map { !canMove($0, by: -1) } ?? true)
+                            .help("Move up")
+
+                            Button {
+                                if let selectedID { move(selectedID, by: 1) }
+                            } label: {
+                                Image(systemName: "chevron.down")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(selectedID.map { !canMove($0, by: 1) } ?? true)
+                            .help("Move down")
+
+                            Button(role: .destructive) {
+                                if let selectedID { delete(selectedID) }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(selectedID == nil)
+                            .help("Delete command")
+                        }
+                        .padding(.top, 6)
                     }
-                }
-                .frame(width: 150, alignment: .leading)
+                    .frame(width: 180, alignment: .leading)
 
-                Divider()
+                    Divider()
 
-                VStack(alignment: .leading, spacing: 10) {
-                    LabeledContent("Shortcut") {
-                        ShortcutRecorder(
-                            keyCode: keyCodeBinding(selection),
-                            modifiers: modifiersBinding(selection),
-                            placeholder: "Unbound"
+                    VStack(alignment: .leading, spacing: 10) {
+                        LabeledContent("Shortcut") {
+                            ShortcutRecorder(
+                                keyCode: keyCodeBinding(command.id),
+                                modifiers: modifiersBinding(command.id),
+                                placeholder: "Unbound"
+                            )
+                            .frame(width: 116, height: 24)
+                        }
+
+                        ZoneCanvas(
+                            grid: store.layout.grid,
+                            commands: commands,
+                            selection: command,
+                            onEdit: { newRect in
+                                store.update { $0.setRect(newRect, for: command.id) }
+                            }
                         )
-                        .frame(width: 116, height: 24)
-                    }
+                        .frame(maxWidth: .infinity, maxHeight: 260)
 
-                    ZoneCanvas(
-                        grid: store.layout.grid,
-                        rects: Dictionary(
-                            uniqueKeysWithValues: PlacementCommand.allCases.map {
-                                ($0, store.layout.rect(for: $0))
+                        HStack {
+                            Text(sizeSummary(for: command))
+                                .font(.callout)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Reset") {
+                                store.update { $0.setFraction(command.defaultFractionRect, for: command.id) }
                             }
-                        ),
-                        selection: selection,
-                        onEdit: { newRect in
-                            store.update { $0.setRect(newRect, for: selection) }
+                            .disabled(isDefault(command))
                         }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: 260)
-
-                    HStack {
-                        Text(sizeSummary)
-                            .font(.callout)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Reset") {
-                            store.update { $0.setFraction(selection.defaultFractionRect, for: selection) }
-                        }
-                        .disabled(isDefault)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack {
+                    Text("No commands yet")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Add command") { addCommand() }
+                }
             }
         } header: {
             Text("Commands")
         } footer: {
-            Text("Choose a command to edit both its shortcut and zone. Drag on the map to set where **\(selection.displayName)** puts a window. Esc cancels placement mode, and Delete clears a shortcut.")
+            Text("Choose a command to edit its name, shortcut, and zone. Drag on the map to set where **\(selectedCommand?.displayName ?? "the command")** puts a window. Reorder with the arrows or the context menu. Esc cancels placement mode, and Delete clears a shortcut.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private var isDefault: Bool {
-        store.layout.fraction(for: selection) == selection.defaultFractionRect.clamped()
+    private func nameBinding(for commandID: String) -> Binding<String> {
+        Binding(
+            get: { store.layout.command(withID: commandID)?.name ?? "" },
+            set: { newName in
+                store.update { $0.renameCommand(commandID, to: newName) }
+            }
+        )
     }
 
-    private var sizeSummary: String {
-        let f = store.layout.fraction(for: selection)
+    private func addCommand() {
+        let id = UUID().uuidString
+        store.update { $0.addCommand(id: id) }
+        selectionID = id
+    }
+
+    private func delete(_ commandID: String) {
+        guard let index = commands.firstIndex(where: { $0.id == commandID }) else { return }
+        let fallbackIndex = index + 1 < commands.count ? index + 1 : index - 1
+        let fallbackID = commands.indices.contains(fallbackIndex) ? commands[fallbackIndex].id : nil
+        store.update { $0.removeCommand(withID: commandID) }
+        selectionID = fallbackID
+    }
+
+    private func canMove(_ commandID: String, by offset: Int) -> Bool {
+        guard let index = commands.firstIndex(where: { $0.id == commandID }) else { return false }
+        return commands.indices.contains(index + offset)
+    }
+
+    private func move(_ commandID: String, by offset: Int) {
+        guard canMove(commandID, by: offset) else { return }
+        store.update { $0.moveCommand(withID: commandID, by: offset) }
+    }
+
+    private func isDefault(_ command: PlacementCommand) -> Bool {
+        command.fraction == command.defaultFractionRect.clamped()
+    }
+
+    private func sizeSummary(for command: PlacementCommand) -> String {
+        let f = command.fraction.clamped()
         let percent = "\(Int((f.w * 100).rounded()))% × \(Int((f.h * 100).rounded()))% of screen"
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return percent }
         let usable = ScreenGeometry.usableFrame(for: screen)
@@ -143,29 +249,29 @@ private struct CommandsSection: View {
         return "\(percent)  ·  \(w) × \(h) pt"
     }
 
-    private func keyCodeBinding(_ command: PlacementCommand) -> Binding<UInt16> {
+    private func keyCodeBinding(_ commandID: String) -> Binding<UInt16?> {
         Binding(
-            get: { store.layout.binding(for: command)?.keyCode ?? 0 },
+            get: { store.layout.command(withID: commandID)?.binding?.keyCode },
             set: { newCode in
                 store.update {
-                    if newCode == 0 {
-                        $0.setBinding(nil, for: command)
-                    } else {
-                        let mods = $0.binding(for: command)?.modifiers ?? 0
-                        $0.setBinding(CommandBinding(keyCode: newCode, modifiers: mods), for: command)
+                    guard let newCode else {
+                        $0.setBinding(nil, for: commandID)
+                        return
                     }
+                    let mods = $0.command(withID: commandID)?.binding?.modifiers ?? 0
+                    $0.setBinding(CommandBinding(keyCode: newCode, modifiers: mods), for: commandID)
                 }
             }
         )
     }
 
-    private func modifiersBinding(_ command: PlacementCommand) -> Binding<UInt> {
+    private func modifiersBinding(_ commandID: String) -> Binding<UInt> {
         Binding(
-            get: { store.layout.binding(for: command)?.modifiers ?? 0 },
+            get: { store.layout.command(withID: commandID)?.binding?.modifiers ?? 0 },
             set: { newMods in
                 store.update {
-                    guard let keyCode = $0.binding(for: command)?.keyCode, keyCode != 0 else { return }
-                    $0.setBinding(CommandBinding(keyCode: keyCode, modifiers: newMods), for: command)
+                    guard let keyCode = $0.command(withID: commandID)?.binding?.keyCode, keyCode != 0 else { return }
+                    $0.setBinding(CommandBinding(keyCode: keyCode, modifiers: newMods), for: commandID)
                 }
             }
         )
