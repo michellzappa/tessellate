@@ -1,11 +1,51 @@
 import SwiftUI
+import AppKit
 import Carbon.HIToolbox
 
-/// A native menu-based shortcut editor. Tab and arrow keys are reserved by
-/// AppKit for focus navigation, so selecting from a menu is deterministic.
+/// A compact shortcut pill that opens an editor popover. Recording is the
+/// primary path; the menus in the popover are a deterministic fallback for
+/// keys AppKit reserves for focus navigation, such as Tab and the arrows.
 struct ShortcutPicker: View {
     @Binding var binding: CommandBinding?
     var placeholder: String = "Unbound"
+    @State private var isPopoverPresented = false
+
+    var body: some View {
+        Button {
+            isPopoverPresented = true
+        } label: {
+            HStack(spacing: 5) {
+                Text(binding.map { displayString(keyCode: $0.keyCode, modifiers: $0.modifiers) } ?? placeholder)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 9)
+            .frame(minWidth: 86, minHeight: 24)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(.quaternary, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPopoverPresented, arrowEdge: .bottom) {
+            ShortcutEditorPopover(
+                binding: $binding,
+                isPresented: $isPopoverPresented,
+                placeholder: placeholder
+            )
+        }
+        .help(binding.map { displayString(keyCode: $0.keyCode, modifiers: $0.modifiers) } ?? placeholder)
+    }
+}
+
+private struct ShortcutEditorPopover: View {
+    @Binding var binding: CommandBinding?
+    @Binding var isPresented: Bool
+    let placeholder: String
+    @State private var isCapturing = false
 
     private var keyCodeSelection: Binding<UInt16?> {
         Binding(
@@ -34,28 +74,264 @@ struct ShortcutPicker: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Picker("Key", selection: keyCodeSelection) {
-                Text(placeholder).tag(nil as UInt16?)
-                ForEach(ShortcutKeyOption.all) { option in
-                    Text(option.menuName).tag(Optional(option.keyCode))
-                }
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Set shortcut")
+                    .font(.headline)
+                Text(binding.map { displayString(keyCode: $0.keyCode, modifiers: $0.modifiers) } ?? placeholder)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
 
-            if binding != nil {
-                Picker("Modifiers", selection: modifiersSelection) {
-                    ForEach(ShortcutModifierOption.all) { option in
-                        Text(option.name).tag(option.value)
+            ShortcutCaptureField(
+                isCapturing: $isCapturing,
+                onCapture: { newBinding in
+                    binding = newBinding
+                    isCapturing = false
+                    isPresented = false
+                },
+                onCancel: {
+                    isCapturing = false
+                },
+                onBegin: {
+                    isCapturing = true
+                }
+            )
+            .frame(width: 270, height: 38)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Choose manually")
+                    .font(.subheadline.weight(.medium))
+
+                HStack(spacing: 8) {
+                    Picker("Key", selection: keyCodeSelection) {
+                        Text("Unbound").tag(nil as UInt16?)
+                        ForEach(ShortcutKeyOption.all) { option in
+                            Text(option.menuName).tag(Optional(option.keyCode))
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+
+                    if binding != nil {
+                        Picker("Modifiers", selection: modifiersSelection) {
+                            ForEach(ShortcutModifierOption.all) { option in
+                                Text(option.name).tag(option.value)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
                     }
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
+            }
+
+            HStack {
+                Text("Esc cancels · Delete clears")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if binding != nil {
+                    Button("Clear") {
+                        binding = nil
+                        isCapturing = false
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
-        .help(binding.map { displayString(keyCode: $0.keyCode, modifiers: $0.modifiers) } ?? placeholder)
+        .padding(16)
+        .frame(width: 302)
+    }
+}
+
+private struct ShortcutCaptureField: NSViewRepresentable {
+    @Binding var isCapturing: Bool
+    var onCapture: (CommandBinding?) -> Void
+    var onCancel: () -> Void
+    var onBegin: () -> Void
+
+    func makeNSView(context: Context) -> ShortcutCaptureView {
+        let view = ShortcutCaptureView()
+        view.onCapture = { binding in
+            DispatchQueue.main.async {
+                self.onCapture(binding)
+            }
+        }
+        view.onCancel = {
+            DispatchQueue.main.async {
+                self.onCancel()
+            }
+        }
+        view.onBegin = {
+            DispatchQueue.main.async {
+                self.onBegin()
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: ShortcutCaptureView, context: Context) {
+        nsView.setCapturing(isCapturing)
+        nsView.needsDisplay = true
+    }
+}
+
+private final class ShortcutCaptureView: NSView {
+    var onCapture: ((CommandBinding?) -> Void)?
+    var onCancel: (() -> Void)?
+    var onBegin: (() -> Void)?
+
+    private var isRecording = false
+    private var localKeyMonitor: Any?
+    private var isHovered = false
+
+    override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { true }
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        layer?.borderWidth = 1
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        stopMonitoring()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        NSCursor.pointingHand.set()
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        NSCursor.arrow.set()
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        layer?.backgroundColor = isRecording
+            ? NSColor.controlAccentColor.withAlphaComponent(0.14).cgColor
+            : NSColor.controlBackgroundColor.cgColor
+        layer?.borderColor = isRecording
+            ? NSColor.controlAccentColor.cgColor
+            : (isHovered ? NSColor.tertiaryLabelColor : NSColor.separatorColor).cgColor
+        layer?.borderWidth = isRecording ? 2 : 1
+
+        let title = isRecording ? "Press a key…" : "Press a shortcut"
+        let subtitle = isRecording ? "Esc cancels" : "Click to record"
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium),
+            .foregroundColor: isRecording ? NSColor.controlAccentColor : NSColor.labelColor
+        ]
+        let subtitleAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 10),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        let titleString = NSAttributedString(string: title, attributes: titleAttributes)
+        let subtitleString = NSAttributedString(string: subtitle, attributes: subtitleAttributes)
+        let titleSize = titleString.size()
+        let subtitleSize = subtitleString.size()
+        titleString.draw(at: NSPoint(
+            x: (bounds.width - titleSize.width) / 2,
+            y: bounds.midY - 1
+        ))
+        subtitleString.draw(at: NSPoint(
+            x: (bounds.width - subtitleSize.width) / 2,
+            y: bounds.midY + 13
+        ))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onBegin?()
+        beginRecording()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard isRecording else {
+            super.keyDown(with: event)
+            return
+        }
+        handle(event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard isRecording else { return super.performKeyEquivalent(with: event) }
+        handle(event)
+        return true
+    }
+
+    func setCapturing(_ shouldCapture: Bool) {
+        if shouldCapture {
+            beginRecording()
+        } else if isRecording {
+            stopMonitoring()
+            isRecording = false
+            needsDisplay = true
+        }
+    }
+
+    private func beginRecording() {
+        guard !isRecording else { return }
+        isRecording = true
+        window?.makeFirstResponder(self)
+        stopMonitoring()
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.isRecording else { return event }
+            self.handle(event)
+            return nil
+        }
+        needsDisplay = true
+    }
+
+    private func stopMonitoring() {
+        if let localKeyMonitor {
+            NSEvent.removeMonitor(localKeyMonitor)
+            self.localKeyMonitor = nil
+        }
+    }
+
+    private func finish(with binding: CommandBinding?) {
+        isRecording = false
+        stopMonitoring()
+        onCapture?(binding)
+        needsDisplay = true
+    }
+
+    private func handle(_ event: NSEvent) {
+        let code = UInt16(event.keyCode)
+        if code == UInt16(kVK_Escape) {
+            isRecording = false
+            stopMonitoring()
+            onCancel?()
+            needsDisplay = true
+            return
+        }
+        if code == UInt16(kVK_Delete) || code == UInt16(kVK_ForwardDelete) {
+            finish(with: nil)
+            return
+        }
+        finish(with: CommandBinding(
+            keyCode: code,
+            modifiers: carbonModifiers(event.modifierFlags)
+        ))
     }
 }
 
@@ -157,7 +433,16 @@ private struct ShortcutModifierOption: Identifiable, Hashable {
     }()
 }
 
-func displayString(keyCode: UInt16?, modifiers: UInt) -> String {
+private func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt {
+    var mods: UInt = 0
+    if flags.contains(.command) { mods |= UInt(cmdKey) }
+    if flags.contains(.option) { mods |= UInt(optionKey) }
+    if flags.contains(.control) { mods |= UInt(controlKey) }
+    if flags.contains(.shift) { mods |= UInt(shiftKey) }
+    return mods
+}
+
+private func displayString(keyCode: UInt16?, modifiers: UInt) -> String {
     guard let keyCode else { return "" }
     var parts: [String] = []
     if modifiers & UInt(controlKey) != 0 { parts.append("⌃") }
@@ -168,7 +453,7 @@ func displayString(keyCode: UInt16?, modifiers: UInt) -> String {
     return parts.joined()
 }
 
-func keyName(_ keyCode: UInt16) -> String {
+private func keyName(_ keyCode: UInt16) -> String {
     switch Int(keyCode) {
     case kVK_Space: return "Space"
     case kVK_Return: return "↩"
@@ -188,9 +473,9 @@ func keyName(_ keyCode: UInt16) -> String {
         let map: [UInt16: String] = [
             0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
             11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 17: "T",
-            18: "1", 19: "2", 20: "3", 21: "4", 22: "6", 23: "5", 25: "9", 26: "7", 28: "8", 29: "0",
-            24: "=", 27: "-", 30: "]", 31: "O", 32: "U", 33: "I", 34: "P", 35: "[",
-            37: "L", 38: "J", 39: "'", 40: "K", 41: ";", 42: "\\", 43: ",", 44: "N", 45: "M", 46: ".", 47: "/", 50: "`"
+            18: "1", 19: "2", 20: "3", 21: "4", 22: "6", 23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8", 29: "0",
+            30: "]", 31: "O", 32: "U", 33: "I", 34: "P", 35: "[", 37: "L", 38: "J", 39: "'", 40: "K",
+            41: ";", 42: "\\", 43: ",", 44: "N", 45: "M", 46: ".", 47: "/", 50: "`"
         ]
         return map[keyCode] ?? "Key \(keyCode)"
     }
