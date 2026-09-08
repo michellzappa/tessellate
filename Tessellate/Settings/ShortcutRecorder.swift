@@ -3,16 +3,14 @@ import AppKit
 import Carbon.HIToolbox
 
 struct ShortcutRecorder: NSViewRepresentable {
-    @Binding var keyCode: UInt16?
-    @Binding var modifiers: UInt
+    @Binding var binding: CommandBinding?
     var placeholder: String = "Click to record"
 
     func makeNSView(context: Context) -> ShortcutRecorderView {
         let v = ShortcutRecorderView()
         v.onCapture = { code, mods in
             DispatchQueue.main.async {
-                self.keyCode = code
-                self.modifiers = mods
+                self.binding = code.map { CommandBinding(keyCode: $0, modifiers: mods) }
             }
         }
         v.placeholder = placeholder
@@ -20,7 +18,10 @@ struct ShortcutRecorder: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: ShortcutRecorderView, context: Context) {
-        nsView.displayText = displayString(keyCode: keyCode, modifiers: modifiers)
+        nsView.displayText = displayString(
+            keyCode: binding?.keyCode,
+            modifiers: binding?.modifiers ?? 0
+        )
         nsView.placeholder = placeholder
         nsView.needsDisplay = true
     }
@@ -109,6 +110,7 @@ final class ShortcutRecorderView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        NSLog("Tessellate: shortcut recorder armed")
         isRecording = true
         Self.activeRecorder = self
         window?.makeFirstResponder(self)
@@ -141,6 +143,7 @@ final class ShortcutRecorderView: NSView {
             return
         }
         let mods = carbonModifiers(event.modifierFlags)
+        NSLog("Tessellate: shortcut recorder captured keyCode=\(code) mods=\(mods)")
         stopRecording()
         onCapture?(code, mods)
         needsDisplay = true

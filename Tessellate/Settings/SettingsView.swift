@@ -30,6 +30,8 @@ struct SettingsView: View {
 private struct CommandsSection: View {
     @Binding var selectionID: String?
     @ObservedObject private var store = LayoutStore.shared
+    @State private var editingCommandID: String?
+    @FocusState private var focusedCommandID: String?
 
     private var commands: [PlacementCommand] { store.layout.commands }
 
@@ -49,14 +51,7 @@ private struct CommandsSection: View {
         Section {
             LabeledContent("Activate") {
                 ShortcutRecorder(
-                    keyCode: Binding(
-                        get: { store.layout.activationKeyCode },
-                        set: { newCode in store.update { $0.activationKeyCode = newCode } }
-                    ),
-                    modifiers: Binding(
-                        get: { store.layout.activationModifiers },
-                        set: { newMods in store.update { $0.activationModifiers = newMods } }
-                    ),
+                    binding: activationBinding,
                     placeholder: "Record"
                 )
                 .frame(width: 116, height: 24)
@@ -82,14 +77,30 @@ private struct CommandsSection: View {
                                     }
                                     .buttonStyle(.plain)
 
-                                    TextField(
-                                        "",
-                                        text: nameBinding(for: command.id)
-                                    )
-                                    .textFieldStyle(.plain)
-                                    .onTapGesture { selectionID = command.id }
+                                    if editingCommandID == command.id {
+                                        TextField("", text: nameBinding(for: command.id))
+                                            .textFieldStyle(.plain)
+                                            .focused($focusedCommandID, equals: command.id)
+                                            .onTapGesture { selectionID = command.id }
+                                    } else {
+                                        Text(command.displayName)
+                                            .lineLimit(1)
+                                            .onTapGesture { selectionID = command.id }
+                                    }
 
                                     Spacer(minLength: 0)
+
+                                    Button {
+                                        if editingCommandID == command.id {
+                                            finishEditingName()
+                                        } else {
+                                            beginEditingName(command.id)
+                                        }
+                                    } label: {
+                                        Image(systemName: editingCommandID == command.id ? "checkmark" : "pencil")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(editingCommandID == command.id ? "Finish editing name" : "Edit command name")
                                 }
                                 .contentShape(Rectangle())
                                 .padding(.vertical, 5)
@@ -154,8 +165,7 @@ private struct CommandsSection: View {
                     VStack(alignment: .leading, spacing: 10) {
                         LabeledContent("Shortcut") {
                             ShortcutRecorder(
-                                keyCode: keyCodeBinding(command.id),
-                                modifiers: modifiersBinding(command.id),
+                                binding: commandBinding(command.id),
                                 placeholder: "Unbound"
                             )
                             .frame(width: 116, height: 24)
@@ -211,10 +221,39 @@ private struct CommandsSection: View {
         )
     }
 
+    private var activationBinding: Binding<CommandBinding?> {
+        Binding(
+            get: {
+                store.layout.activationKeyCode.map {
+                    CommandBinding(keyCode: $0, modifiers: store.layout.activationModifiers)
+                }
+            },
+            set: { newBinding in
+                store.update {
+                    $0.activationKeyCode = newBinding?.keyCode
+                    $0.activationModifiers = newBinding?.modifiers ?? 0
+                }
+            }
+        )
+    }
+
+    private func beginEditingName(_ commandID: String) {
+        selectionID = commandID
+        editingCommandID = commandID
+        DispatchQueue.main.async {
+            focusedCommandID = commandID
+        }
+    }
+
+    private func finishEditingName() {
+        focusedCommandID = nil
+        editingCommandID = nil
+    }
+
     private func addCommand() {
         let id = UUID().uuidString
         store.update { $0.addCommand(id: id) }
-        selectionID = id
+        beginEditingName(id)
     }
 
     private func delete(_ commandID: String) {
@@ -222,6 +261,9 @@ private struct CommandsSection: View {
         let fallbackIndex = index + 1 < commands.count ? index + 1 : index - 1
         let fallbackID = commands.indices.contains(fallbackIndex) ? commands[fallbackIndex].id : nil
         store.update { $0.removeCommand(withID: commandID) }
+        if editingCommandID == commandID {
+            finishEditingName()
+        }
         selectionID = fallbackID
     }
 
@@ -249,30 +291,11 @@ private struct CommandsSection: View {
         return "\(percent)  ·  \(w) × \(h) pt"
     }
 
-    private func keyCodeBinding(_ commandID: String) -> Binding<UInt16?> {
+    private func commandBinding(_ commandID: String) -> Binding<CommandBinding?> {
         Binding(
-            get: { store.layout.command(withID: commandID)?.binding?.keyCode },
-            set: { newCode in
-                store.update {
-                    guard let newCode else {
-                        $0.setBinding(nil, for: commandID)
-                        return
-                    }
-                    let mods = $0.command(withID: commandID)?.binding?.modifiers ?? 0
-                    $0.setBinding(CommandBinding(keyCode: newCode, modifiers: mods), for: commandID)
-                }
-            }
-        )
-    }
-
-    private func modifiersBinding(_ commandID: String) -> Binding<UInt> {
-        Binding(
-            get: { store.layout.command(withID: commandID)?.binding?.modifiers ?? 0 },
-            set: { newMods in
-                store.update {
-                    guard let keyCode = $0.command(withID: commandID)?.binding?.keyCode else { return }
-                    $0.setBinding(CommandBinding(keyCode: keyCode, modifiers: newMods), for: commandID)
-                }
+            get: { store.layout.command(withID: commandID)?.binding },
+            set: { newBinding in
+                store.update { $0.setBinding(newBinding, for: commandID) }
             }
         )
     }
