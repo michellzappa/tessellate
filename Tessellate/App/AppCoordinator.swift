@@ -104,7 +104,7 @@ final class AppCoordinator: ObservableObject {
     private func pollAccessibility() {
         trustPollTimer?.invalidate()
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 let trusted = WindowEngine.isTrusted()
                 if let self, self.isAccessibilityGranted != trusted {
                     self.isAccessibilityGranted = trusted
