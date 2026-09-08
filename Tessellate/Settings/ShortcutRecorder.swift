@@ -35,27 +35,55 @@ final class ShortcutRecorderView: NSView {
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { true }
 
+    private var isHovered = false
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.cornerRadius = 6
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor.cgColor
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        NSCursor.pointingHand.set()
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        NSCursor.arrow.set()
+        needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
+        // Recording reads as an active field; hover just hints it is clickable.
         layer?.backgroundColor = isRecording
-            ? NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
+            ? NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor
             : NSColor.controlBackgroundColor.cgColor
+        layer?.borderColor = isRecording
+            ? NSColor.controlAccentColor.cgColor
+            : (isHovered ? NSColor.tertiaryLabelColor : NSColor.separatorColor).cgColor
+        layer?.borderWidth = isRecording ? 2 : 1
 
         let text = isRecording ? "Press a key…" : (displayText.isEmpty ? placeholder : displayText)
         let color: NSColor = isRecording
             ? .controlAccentColor
-            : (displayText.isEmpty ? .secondaryLabelColor : .labelColor)
+            : (displayText.isEmpty ? .tertiaryLabelColor : .labelColor)
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
             .foregroundColor: color
         ]
         let str = NSAttributedString(string: text, attributes: attrs)

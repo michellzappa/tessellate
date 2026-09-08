@@ -1,433 +1,347 @@
 import SwiftUI
 
+/// One scrolling page instead of three tabs.
+///
+/// The old layout split things that are really one decision: a command's target
+/// region lived on the Commands tab, its key on the same tab but in a separate
+/// card, and a read-only picture of all four regions on General. Here the
+/// regions share a single canvas, the keys share a single list, and everything
+/// else is one short General section.
 struct SettingsView: View {
     @EnvironmentObject var coordinator: AppCoordinator
-    @State private var selectedTab: Tab = .general
-
-    enum Tab: String, CaseIterable, Identifiable {
-        case general, activation, commands
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .general: return "General"
-            case .activation: return "Activation"
-            case .commands: return "Commands"
-            }
-        }
-    }
+    @ObservedObject private var store = LayoutStore.shared
+    @State private var selection: PlacementCommand = .left
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            GeneralSettings()
-                .tabItem { Text("General") }
-                .tag(Tab.general)
-            ActivationSettings()
-                .tabItem { Text("Activation") }
-                .tag(Tab.activation)
-            CommandsSettings()
-                .tabItem { Text("Commands") }
-                .tag(Tab.commands)
+        Form {
+            if !coordinator.isAccessibilityGranted {
+                Section {
+                    AccessibilityBanner()
+                }
+            }
+
+            ZonesSection(selection: $selection)
+            KeysSection(selection: $selection)
+            GeneralSection()
+            AboutSection()
         }
-        .frame(width: 560, height: 640)
+        .formStyle(.grouped)
+        .frame(width: 520, height: 680)
     }
 }
 
-private struct GeneralSettings: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+// MARK: - Zones
+
+private struct ZonesSection: View {
+    @Binding var selection: PlacementCommand
     @ObservedObject private var store = LayoutStore.shared
 
     var body: some View {
-
-        Form {
-            Section {
-                Toggle("Launch at Login", isOn: Binding(
-                    get: { store.layout.launchAtLogin },
-                    set: { newValue in store.update { $0.launchAtLogin = newValue } }
-                ))
-                Toggle("Show menu bar icon", isOn: Binding(
-                    get: { store.layout.showMenuBarIcon },
-                    set: { newValue in store.update { $0.showMenuBarIcon = newValue } }
-                ))
-            } header: {
-                Text("System")
-            }
-
-            Section {
-                Picker("Density", selection: Binding(
-                    get: { store.layout.gridDensity },
-                    set: { newValue in
-                        store.update { layout in
-                            layout.gridDensity = newValue
-                            if newValue.isAutomatic, let screen = NSScreen.main ?? NSScreen.screens.first {
-                                layout.resizeGrid(to: GridDimensions.proposed(for: screen, density: newValue))
-                            }
-                        }
-                    }
-                )) {
-                    ForEach(GridDensity.allCases) { density in
-                        Text(density.displayName).tag(density)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text(gridSummary(store.layout))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if store.layout.gridDensity == .custom {
-                    Stepper(value: Binding(
-                        get: { store.layout.grid.columns },
-                        set: { newValue in
-                            store.update {
-                                var g = $0.grid
-                                g.columns = max(1, min(64, newValue))
-                                $0.resizeGrid(to: g)
-                            }
-                        }
-                    ), in: 1...64) {
-                        Text("Columns: \(store.layout.grid.columns)")
-                    }
-                    Stepper(value: Binding(
-                        get: { store.layout.grid.rows },
-                        set: { newValue in
-                            store.update {
-                                var g = $0.grid
-                                g.rows = max(1, min(64, newValue))
-                                $0.resizeGrid(to: g)
-                            }
-                        }
-                    ), in: 1...64) {
-                        Text("Rows: \(store.layout.grid.rows)")
-                    }
-                    Button("Fit to Screen") {
-                        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-                        store.update { $0.resizeGrid(to: GridDimensions.proposed(for: screen, density: .balanced)) }
-                    }
-                }
-                GridPreview(
-                    grid: store.layout.grid,
-                    rects: Dictionary(
-                        uniqueKeysWithValues: PlacementCommand.allCases.map { ($0, store.layout.rect(for: $0)) }
-                    )
-                )
-                .padding(.top, 4)
-            } header: {
-                Text("Grid")
-            } footer: {
-                Text(store.layout.gridDensity.isAutomatic
-                     ? "Sized from your display so every cell is square. Recomputed when the screen changes."
-                     : "Custom counts are used as-is; cells may not be square.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                if !coordinator.isAccessibilityGranted {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading) {
-                            Text("Accessibility permission required")
-                                .font(.headline)
-                            Text("Tessellate needs Accessibility access to move and resize windows.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button("Open Settings") {
-                            coordinator.openAccessibilitySettings()
-                        }
-                    }
-                    .padding(8)
-                    .background(Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                } else {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Text("Accessibility granted")
-                        Spacer()
-                    }
-                    .padding(8)
-                    .background(Color.green.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-
-                RunningBinaryRow()
-            } header: {
-                Text("Permissions")
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-
-    private func gridSummary(_ layout: TessellateLayout) -> String {
-        let grid = layout.grid
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else {
-            return "\(grid.columns) × \(grid.rows) cells"
-        }
-        let cell = grid.cellSize(on: screen)
-        return "\(grid.columns) × \(grid.rows) cells  ·  \(Int(cell.width.rounded())) × \(Int(cell.height.rounded())) pt each"
-    }
-}
-
-private struct ActivationSettings: View {
-    @EnvironmentObject var coordinator: AppCoordinator
-    @ObservedObject private var store = LayoutStore.shared
-
-    var body: some View {
-
-        Form {
-            Section {
-                HStack {
-                    Text("Activation shortcut")
-                    Spacer()
-                    ShortcutRecorder(
-                        keyCode: Binding(
-                            get: { store.layout.activationKeyCode },
-                            set: { newCode in
-                                store.update { $0.activationKeyCode = newCode }
-                            }
-                        ),
-                        modifiers: Binding(
-                            get: { store.layout.activationModifiers },
-                            set: { newMods in
-                                store.update { $0.activationModifiers = newMods }
-                            }
-                        ),
-                        placeholder: "Click to record"
-                    )
-                    .frame(width: 140, height: 22)
-                }
-                Text("Default: ⌥ Space. May conflict with Spotlight — change Spotlight's shortcut in System Settings → Keyboard → Keyboard Shortcuts → Spotlight if needed.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("Activation")
-            }
-
-            Section {
-                Text("After activation, press a configured command key to move the focused window.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Press Esc to cancel. Placement mode expires automatically after \(Int(coordinator.hotkeyManager.placementTimeout)) seconds.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("Behavior")
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-}
-
-private struct CommandsSettings: View {
-    @EnvironmentObject var coordinator: AppCoordinator
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
+        Section {
+            Picker("Zone", selection: $selection) {
                 ForEach(PlacementCommand.allCases) { command in
-                    CommandSection(command: command)
+                    Text(command.displayName).tag(command)
                 }
             }
-            .padding()
-        }
-    }
-}
+            .pickerStyle(.inline)
+            .labelsHidden()
 
-private struct CommandSection: View {
-    let command: PlacementCommand
-    @EnvironmentObject var coordinator: AppCoordinator
-    @ObservedObject private var store = LayoutStore.shared
-
-    var body: some View {
-        let currentBinding = store.layout.bindings[command.rawValue]
-
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(command.displayName)
-                    .font(.headline)
-                Spacer()
-                Text("Default: \(defaultKeyLabel(command))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Text("Key")
-                Spacer()
-                ShortcutRecorder(
-                    keyCode: Binding(
-                        get: { currentBinding?.keyCode ?? 0 },
-                        set: { newCode in
-                            if newCode == 0 {
-                                store.update { $0.setBinding(nil, for: command) }
-                            } else {
-                                let mods = currentBinding?.modifiers ?? 0
-                                store.update { $0.setBinding(CommandBinding(keyCode: newCode, modifiers: mods), for: command) }
-                            }
-                        }
-                    ),
-                    modifiers: Binding(
-                        get: { currentBinding?.modifiers ?? 0 },
-                        set: { newMods in
-                            guard let keyCode = currentBinding?.keyCode, keyCode != 0 else { return }
-                            store.update { $0.setBinding(CommandBinding(keyCode: keyCode, modifiers: newMods), for: command) }
-                        }
-                    ),
-                    placeholder: "Unbound"
-                )
-                .frame(width: 110, height: 22)
-            }
-
-            GridEditor(
-                rect: Binding(
-                    get: { store.layout.rect(for: command) },
-                    set: { newRect in
-                        store.update { $0.setRect(newRect, for: command) }
+            ZoneCanvas(
+                grid: store.layout.grid,
+                rects: Dictionary(
+                    uniqueKeysWithValues: PlacementCommand.allCases.map {
+                        ($0, store.layout.rect(for: $0))
                     }
                 ),
-                grid: store.layout.grid
-            ) {
-                store.update { $0.setRect(command.defaultRect(in: $0.grid), for: command) }
+                selection: selection,
+                onEdit: { newRect in
+                    store.update { $0.setRect(newRect, for: selection) }
+                }
+            )
+            .frame(maxHeight: 260)
+
+            HStack {
+                Text(sizeSummary)
+                    .font(.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Reset \(selection.displayName)") {
+                    store.update { $0.setFraction(selection.defaultFractionRect, for: selection) }
+                }
+                .disabled(isDefault)
             }
-            .frame(maxWidth: 320)
+        } header: {
+            Text("Zones")
+        } footer: {
+            Text("Drag on the map to set where **\(selection.displayName)** puts a window. The other zones are outlined for reference.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
-        .padding(10)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+    }
+
+    private var isDefault: Bool {
+        store.layout.fraction(for: selection) == selection.defaultFractionRect.clamped()
+    }
+
+    private var sizeSummary: String {
+        let f = store.layout.fraction(for: selection)
+        let percent = "\(Int((f.w * 100).rounded()))% × \(Int((f.h * 100).rounded()))% of screen"
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return percent }
+        let usable = ScreenGeometry.usableFrame(for: screen)
+        let w = Int((f.w * usable.width).rounded())
+        let h = Int((f.h * usable.height).rounded())
+        return "\(percent)  ·  \(w) × \(h) pt"
+    }
+}
+
+
+// MARK: - Keys
+
+private struct KeysSection: View {
+    @Binding var selection: PlacementCommand
+    @EnvironmentObject var coordinator: AppCoordinator
+    @ObservedObject private var store = LayoutStore.shared
+
+    var body: some View {
+        Section {
+            LabeledContent("Activate") {
+                ShortcutRecorder(
+                    keyCode: Binding(
+                        get: { store.layout.activationKeyCode },
+                        set: { newCode in store.update { $0.activationKeyCode = newCode } }
+                    ),
+                    modifiers: Binding(
+                        get: { store.layout.activationModifiers },
+                        set: { newMods in store.update { $0.activationModifiers = newMods } }
+                    ),
+                    placeholder: "Record"
+                )
+                .frame(width: 116, height: 24)
+            }
+
+            ForEach(PlacementCommand.allCases) { command in
+                LabeledContent {
+                    ShortcutRecorder(
+                        keyCode: keyCodeBinding(command),
+                        modifiers: modifiersBinding(command),
+                        placeholder: "Unbound"
+                    )
+                    .frame(width: 116, height: 24)
+                } label: {
+                    Text(command.displayName)
+                        .foregroundStyle(command == selection ? Color.accentColor : .primary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { selection = command }
+            }
+        } header: {
+            Text("Keys")
+        } footer: {
+            Text("Press the activation key, then a zone key — ⌥Space then ← by default. Esc cancels, and placement mode ends by itself after \(Int(coordinator.hotkeyManager.placementTimeout)) seconds. Delete clears a binding.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func keyCodeBinding(_ command: PlacementCommand) -> Binding<UInt16> {
+        Binding(
+            get: { store.layout.binding(for: command)?.keyCode ?? 0 },
+            set: { newCode in
+                store.update {
+                    if newCode == 0 {
+                        $0.setBinding(nil, for: command)
+                    } else {
+                        let mods = $0.binding(for: command)?.modifiers ?? 0
+                        $0.setBinding(CommandBinding(keyCode: newCode, modifiers: mods), for: command)
+                    }
+                }
+            }
         )
     }
 
-    private func defaultKeyLabel(_ command: PlacementCommand) -> String {
-        switch command {
-        case .left: return "←"
-        case .right: return "→"
-        case .center: return "Space"
-        case .maximize: return "↑"
-        }
-    }
-}
-
-private struct GridPreview: View {
-    let grid: GridDimensions
-    let rects: [PlacementCommand: GridRect]
-
-    var body: some View {
-        GeometryReader { geo in
-            let cellW = geo.size.width / CGFloat(grid.columns)
-            let cellH = geo.size.height / CGFloat(grid.rows)
-
-            ZStack(alignment: .topLeading) {
-                Canvas { ctx, size in
-                    let shading = GraphicsContext.Shading.color(Color.secondary.opacity(0.3))
-                    for col in 0...grid.columns {
-                        let x = CGFloat(col) * cellW
-                        var path = Path()
-                        path.move(to: CGPoint(x: x, y: 0))
-                        path.addLine(to: CGPoint(x: x, y: size.height))
-                        ctx.stroke(path, with: shading, lineWidth: 0.5)
-                    }
-                    for row in 0...grid.rows {
-                        let y = CGFloat(row) * cellH
-                        var path = Path()
-                        path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: size.width, y: y))
-                        ctx.stroke(path, with: shading, lineWidth: 0.5)
-                    }
-                }
-
-                ForEach(PlacementCommand.allCases) { command in
-                    let r = rects[command] ?? command.defaultRect(in: grid)
-                    Rectangle()
-                        .fill(zoneColor(command).opacity(0.25))
-                        .overlay(
-                            Rectangle().strokeBorder(zoneColor(command), lineWidth: 1.5)
-                        )
-                        .overlay(
-                            Text(zoneLabel(command))
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.white)
-                        )
-                        .frame(
-                            width: CGFloat(r.w) * cellW,
-                            height: CGFloat(r.h) * cellH
-                        )
-                        .offset(
-                            x: CGFloat(r.x) * cellW,
-                            y: CGFloat(r.y) * cellH
-                        )
+    private func modifiersBinding(_ command: PlacementCommand) -> Binding<UInt> {
+        Binding(
+            get: { store.layout.binding(for: command)?.modifiers ?? 0 },
+            set: { newMods in
+                store.update {
+                    guard let keyCode = $0.binding(for: command)?.keyCode, keyCode != 0 else { return }
+                    $0.setBinding(CommandBinding(keyCode: keyCode, modifiers: newMods), for: command)
                 }
             }
-        }
-        .aspectRatio(CGFloat(grid.columns) / CGFloat(grid.rows), contentMode: .fit)
-        .frame(maxHeight: 200)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-
-    private func zoneColor(_ command: PlacementCommand) -> Color {
-        switch command {
-        case .left: return .blue
-        case .right: return .green
-        case .center: return .purple
-        case .maximize: return .orange
-        }
-    }
-
-    private func zoneLabel(_ command: PlacementCommand) -> String {
-        switch command {
-        case .left: return "←"
-        case .right: return "→"
-        case .center: return "Space"
-        case .maximize: return "↑"
-        }
+        )
     }
 }
 
+// MARK: - General
 
-/// The permission is bound to this exact binary. During development the path
-/// changes between builds (and an ad-hoc signature invalidates the grant on
-/// every rebuild), so show which executable is actually asking.
-private struct RunningBinaryRow: View {
+private struct GeneralSection: View {
+    @ObservedObject private var store = LayoutStore.shared
+
+    var body: some View {
+        Section {
+            Toggle("Launch at login", isOn: Binding(
+                get: { store.layout.launchAtLogin },
+                set: { newValue in store.update { $0.launchAtLogin = newValue } }
+            ))
+
+            Toggle("Show menu bar icon", isOn: Binding(
+                get: { store.layout.showMenuBarIcon },
+                set: { newValue in store.update { $0.showMenuBarIcon = newValue } }
+            ))
+            if !store.layout.showMenuBarIcon {
+                Text("With the icon hidden, reopen Tessellate from Spotlight to get back to Settings.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Picker("Grid", selection: Binding(
+                get: { store.layout.gridDensity },
+                set: { newValue in
+                    store.update { layout in
+                        layout.gridDensity = newValue
+                        if newValue.isAutomatic, let screen = NSScreen.main ?? NSScreen.screens.first {
+                            layout.resizeGrid(to: GridDimensions.proposed(for: screen, density: newValue))
+                        }
+                    }
+                }
+            )) {
+                ForEach(GridDensity.allCases) { density in
+                    Text(density.displayName).tag(density)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if store.layout.gridDensity == .custom {
+                Stepper(value: columnsBinding, in: GridDimensions.bounds) {
+                    LabeledContent("Columns") { Text("\(store.layout.grid.columns)").monospacedDigit() }
+                }
+                Stepper(value: rowsBinding, in: GridDimensions.bounds) {
+                    LabeledContent("Rows") { Text("\(store.layout.grid.rows)").monospacedDigit() }
+                }
+            }
+        } header: {
+            Text("General")
+        } footer: {
+            Text(gridFooter)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var columnsBinding: Binding<Int> {
+        Binding(
+            get: { store.layout.grid.columns },
+            set: { newValue in
+                store.update {
+                    var g = $0.grid
+                    g.columns = min(max(newValue, GridDimensions.bounds.lowerBound), GridDimensions.bounds.upperBound)
+                    $0.resizeGrid(to: g)
+                }
+            }
+        )
+    }
+
+    private var rowsBinding: Binding<Int> {
+        Binding(
+            get: { store.layout.grid.rows },
+            set: { newValue in
+                store.update {
+                    var g = $0.grid
+                    g.rows = min(max(newValue, GridDimensions.bounds.lowerBound), GridDimensions.bounds.upperBound)
+                    $0.resizeGrid(to: g)
+                }
+            }
+        )
+    }
+
+    private var gridFooter: String {
+        let grid = store.layout.grid
+        let size = "\(grid.columns) × \(grid.rows)"
+        return store.layout.gridDensity.isAutomatic
+            ? "\(size), sized from your display so cells stay square. The grid only decides where dragging snaps — it never moves a zone you already set."
+            : "\(size), used as-is. Cells may not be square."
+    }
+}
+
+// MARK: - About
+
+private struct AboutSection: View {
+    @EnvironmentObject var coordinator: AppCoordinator
     @State private var copied = false
 
-    private var bundlePath: String { Bundle.main.bundlePath }
-    private var executablePath: String { Bundle.main.executablePath ?? "unknown" }
+    private var version: String {
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        return "\(short) (\(build))"
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Granted to this executable")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            Text(executablePath)
-                .font(.system(size: 11, design: .monospaced))
-                .textSelection(.enabled)
-                .lineLimit(3)
-                .truncationMode(.middle)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 12) {
-                Button(copied ? "Copied" : "Copy path") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(bundlePath, forType: .string)
-                    copied = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
-                }
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: bundlePath)])
+        Section {
+            LabeledContent("Accessibility") {
+                if coordinator.isAccessibilityGranted {
+                    Label("Granted", systemImage: "checkmark.circle.fill")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(.green)
+                } else {
+                    Button("Open System Settings") { coordinator.openAccessibilitySettings() }
                 }
             }
-            .buttonStyle(.link)
-            .font(.caption)
+            LabeledContent("Version", value: version)
+
+            // The Accessibility grant binds to one exact binary, and during
+            // development the Xcode build and the command-line build are
+            // different files — so show which one is actually asking.
+            DisclosureGroup("Running binary") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(Bundle.main.executablePath ?? "unknown")
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 12) {
+                        Button(copied ? "Copied" : "Copy path") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(Bundle.main.bundlePath, forType: .string)
+                            copied = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+                        }
+                        Button("Reveal in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([
+                                URL(fileURLWithPath: Bundle.main.bundlePath)
+                            ])
+                        }
+                    }
+                    .buttonStyle(.link)
+                    .font(.callout)
+                }
+                .padding(.top, 4)
+            }
+
+            Button("Quit Tessellate") { coordinator.quit() }
         }
-        .padding(.top, 4)
+    }
+}
+
+private struct AccessibilityBanner: View {
+    @EnvironmentObject var coordinator: AppCoordinator
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title2)
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Accessibility access required")
+                    .font(.headline)
+                Text("Tessellate can't move windows until macOS grants it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button("Open…") { coordinator.openAccessibilitySettings() }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(.vertical, 4)
     }
 }

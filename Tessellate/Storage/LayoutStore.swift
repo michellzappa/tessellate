@@ -36,6 +36,7 @@ final class LayoutStore: ObservableObject {
     func update(_ block: (inout TessellateLayout) -> Void) {
         var copy = layout
         block(&copy)
+        guard copy != layout else { return }
         layout = copy
     }
 
@@ -44,7 +45,9 @@ final class LayoutStore: ObservableObject {
     }
 
     func resetAll() {
-        layout = TessellateLayout()
+        let defaultLayout = TessellateLayout()
+        guard layout != defaultLayout else { return }
+        layout = defaultLayout
     }
 
     func resetGrid() {

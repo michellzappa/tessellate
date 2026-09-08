@@ -6,6 +6,8 @@ enum PlacementCommand: String, CaseIterable, Codable, Identifiable {
     case left
     case right
     case center
+    case upperHalf
+    case lowerHalf
     case maximize
 
     var id: String { rawValue }
@@ -15,6 +17,8 @@ enum PlacementCommand: String, CaseIterable, Codable, Identifiable {
         case .left: return "Left"
         case .right: return "Right"
         case .center: return "Center"
+        case .upperHalf: return "Upper Half"
+        case .lowerHalf: return "Lower Half"
         case .maximize: return "Maximize"
         }
     }
@@ -25,6 +29,8 @@ enum PlacementCommand: String, CaseIterable, Codable, Identifiable {
         case .left: return (0, 0, 0.5, 1)
         case .right: return (0.5, 0, 0.5, 1)
         case .center: return (0.125, 0, 0.75, 1)
+        case .upperHalf: return (0, 0, 1, 0.5)
+        case .lowerHalf: return (0, 0.5, 1, 0.5)
         case .maximize: return (0, 0, 1, 1)
         }
     }
@@ -51,7 +57,9 @@ enum PlacementCommand: String, CaseIterable, Codable, Identifiable {
         case .left: return 0
         case .right: return 1
         case .center: return 2
-        case .maximize: return 3
+        case .upperHalf: return 3
+        case .lowerHalf: return 4
+        case .maximize: return 5
         }
     }
 
@@ -262,7 +270,9 @@ struct TessellateLayout: Codable, Equatable {
             PlacementCommand.left.rawValue: CommandBinding(keyCode: 123, modifiers: 0),
             PlacementCommand.right.rawValue: CommandBinding(keyCode: 124, modifiers: 0),
             PlacementCommand.center.rawValue: CommandBinding(keyCode: 49, modifiers: 0),
-            PlacementCommand.maximize.rawValue: CommandBinding(keyCode: 126, modifiers: 0)
+            PlacementCommand.upperHalf.rawValue: CommandBinding(keyCode: 126, modifiers: 0),
+            PlacementCommand.lowerHalf.rawValue: CommandBinding(keyCode: 125, modifiers: 0),
+            PlacementCommand.maximize.rawValue: CommandBinding(keyCode: 48, modifiers: 0)
         ]
         self.activationKeyCode = 49
         self.activationModifiers = UInt(optionKey)
@@ -348,6 +358,7 @@ struct TessellateLayout: Codable, Equatable {
 enum CarbonKeys {
     static let escape: UInt16 = 53
     static let space: UInt16 = 49
+    static let tab: UInt16 = 48
     static let leftArrow: UInt16 = 123
     static let rightArrow: UInt16 = 124
     static let downArrow: UInt16 = 125

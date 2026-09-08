@@ -16,13 +16,15 @@ Press the activation hotkey (**⌥Space** by default). Tessellate captures the
 focused window and outlines it, so you can see what is about to move. Then press
 a command key:
 
-| Key     | Action   |
-| ------- | -------- |
-| `←`     | Left     |
-| `→`     | Right    |
-| `Space` | Center   |
-| `↑`     | Maximize |
-| `Esc`   | Cancel   |
+| Key     | Action      |
+| ------- | ----------- |
+| `←`     | Left        |
+| `→`     | Right       |
+| `Space` | Center      |
+| `↑`     | Upper Half  |
+| `↓`     | Lower Half  |
+| `Tab`   | Maximize    |
+| `Esc`   | Cancel      |
 
 Placement mode expires after 2 seconds if you don't press anything, and a second
 press of the activation hotkey cancels it.
@@ -76,20 +78,25 @@ name.
 
 Settings lives in the menu bar item.
 
-**Commands** — each of the four commands has a target region you edit on a grid,
-plus its key binding.
+**Zones** — one map of the screen for all four commands. Pick a command, drag
+on the map to set where it puts a window; the other three stay outlined for
+reference.
 
-**Grid** — the grid is a snapping aid for editing, nothing more. Targets are
-stored as fractions of the usable screen, so changing the grid changes only
-where your edits snap; it never moves an existing target. By default the grid
-size is derived from your display so cells come out roughly square, at a density
-you choose (Light / Balanced / Dense), and it is recomputed when the display
-configuration changes. You can set explicit column and row counts instead.
+**Keys** — the activation key and the four command keys in one list. Press
+Delete while recording to clear a binding.
 
-**Permissions** — shows whether Accessibility is granted, and the full path of
-the running executable. The grant binds to one exact binary, and during
-development your Xcode build and your command-line build are different files, so
-knowing which one is asking saves a lot of confusion.
+**General** — launch at login, and the grid. The grid is a snapping aid for
+editing, nothing more. Targets are stored as fractions of the usable screen, so
+changing the grid changes only where your edits snap; it never moves an existing
+target. By default the grid size is derived from your display so cells come out
+roughly square, at a density you choose (Light / Balanced / Dense), and it is
+recomputed when the display configuration changes. You can set explicit column
+and row counts instead.
+
+**About** — whether Accessibility is granted, and the full path of the running
+executable. The grant binds to one exact binary, and during development your
+Xcode build and your command-line build are different files, so knowing which
+one is asking saves a lot of confusion.
 
 ## Architecture
 
@@ -101,6 +108,7 @@ Roughly 2,100 lines of Swift, no dependencies.
 | `Window/WindowEngine` | Accessibility API: find the focused window, read and set its frame |
 | `Window/ScreenGeometry` | Cocoa ↔ Accessibility coordinate conversion, and fraction → screen rect |
 | `Overlay/FocusIndicator` | The outline around the window that is about to move |
+| `Settings/*` | The settings window: one page — zone map, keys, general, about |
 | `Models/TessellateLayout` | Targets, bindings, grid; persisted to `UserDefaults` |
 | `App/AppCoordinator` | Wires the above together |
 
