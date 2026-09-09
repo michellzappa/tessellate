@@ -15,7 +15,7 @@ struct ShortcutPicker: View {
             isPopoverPresented = true
         } label: {
             HStack(spacing: 5) {
-                Text(binding.map { displayString(keyCode: $0.keyCode, modifiers: $0.modifiers) } ?? placeholder)
+                Text(binding.map(ShortcutDisplay.string(for:)) ?? placeholder)
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.caption2.weight(.semibold))
@@ -37,7 +37,7 @@ struct ShortcutPicker: View {
                 placeholder: placeholder
             )
         }
-        .help(binding.map { displayString(keyCode: $0.keyCode, modifiers: $0.modifiers) } ?? placeholder)
+        .help(binding.map(ShortcutDisplay.string(for:)) ?? placeholder)
     }
 }
 
@@ -78,7 +78,7 @@ private struct ShortcutEditorPopover: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Set shortcut")
                     .font(.headline)
-                Text(binding.map { displayString(keyCode: $0.keyCode, modifiers: $0.modifiers) } ?? placeholder)
+                Text(binding.map(ShortcutDisplay.string(for:)) ?? placeholder)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -440,43 +440,4 @@ private func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt {
     if flags.contains(.control) { mods |= UInt(controlKey) }
     if flags.contains(.shift) { mods |= UInt(shiftKey) }
     return mods
-}
-
-private func displayString(keyCode: UInt16?, modifiers: UInt) -> String {
-    guard let keyCode else { return "" }
-    var parts: [String] = []
-    if modifiers & UInt(controlKey) != 0 { parts.append("⌃") }
-    if modifiers & UInt(optionKey) != 0 { parts.append("⌥") }
-    if modifiers & UInt(shiftKey) != 0 { parts.append("⇧") }
-    if modifiers & UInt(cmdKey) != 0 { parts.append("⌘") }
-    parts.append(keyName(keyCode))
-    return parts.joined()
-}
-
-private func keyName(_ keyCode: UInt16) -> String {
-    switch Int(keyCode) {
-    case kVK_Space: return "Space"
-    case kVK_Return: return "↩"
-    case kVK_Tab: return "⇥"
-    case kVK_Delete: return "⌫"
-    case kVK_ForwardDelete: return "⌦"
-    case kVK_Escape: return "⎋"
-    case kVK_LeftArrow: return "←"
-    case kVK_RightArrow: return "→"
-    case kVK_UpArrow: return "↑"
-    case kVK_DownArrow: return "↓"
-    case kVK_Home: return "Home"
-    case kVK_End: return "End"
-    case kVK_PageUp: return "Page Up"
-    case kVK_PageDown: return "Page Down"
-    default:
-        let map: [UInt16: String] = [
-            0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
-            11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 17: "T",
-            18: "1", 19: "2", 20: "3", 21: "4", 22: "6", 23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8", 29: "0",
-            30: "]", 31: "O", 32: "U", 33: "I", 34: "P", 35: "[", 37: "L", 38: "J", 39: "'", 40: "K",
-            41: ";", 42: "\\", 43: ",", 44: "N", 45: "M", 46: ".", 47: "/", 50: "`"
-        ]
-        return map[keyCode] ?? "Key \(keyCode)"
-    }
 }

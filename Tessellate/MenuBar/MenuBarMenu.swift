@@ -12,6 +12,7 @@ struct MenuBarMenu: View {
             Button(command.displayName) {
                 coordinator.applyPlacement(command)
             }
+            .keyboardShortcut(ShortcutDisplay.keyboardShortcut(for: command.binding))
         }
         Divider()
         Button("Settings…") {

@@ -1,29 +1,31 @@
 import SwiftUI
 
-/// One scrolling page instead of three tabs.
-///
-/// Each command is edited as one decision: choose it in the left column, then
-/// adjust its shortcut and target region together in the detail column.
+/// Native macOS settings layout: a sidebar for destinations, and a focused
+/// editor for the selected command.
 struct SettingsView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
-    @State private var selectionID: String? = "left"
+    @State private var page: SettingsPage? = .commands
 
     var body: some View {
-        Form {
-            if !coordinator.isAccessibilityGranted {
-                Section {
-                    AccessibilityBanner()
+        NavigationSplitView {
+            List(selection: $page) {
+                Section("Tessellate") {
+                    Label("Commands", systemImage: "rectangle.3.group")
+                        .tag(SettingsPage.commands)
+                    Label("General", systemImage: "gearshape")
+                        .tag(SettingsPage.general)
+                    Label("About", systemImage: "info.circle")
+                        .tag(SettingsPage.about)
                 }
             }
-
-            CommandsSection(selectionID: $selectionID)
-            GeneralSection()
-            AboutSection()
+            .listStyle(.sidebar)
+            .navigationTitle("Settings")
+        } detail: {
+            SettingsDetail(page: page ?? .commands)
         }
-        .formStyle(.grouped)
+        .navigationSplitViewStyle(.balanced)
         .frame(
-            minWidth: 640,
-            idealWidth: 720,
+            minWidth: 760,
+            idealWidth: 900,
             maxWidth: .infinity,
             minHeight: 560,
             idealHeight: 640,
@@ -32,20 +34,42 @@ struct SettingsView: View {
     }
 }
 
+private enum SettingsPage: Hashable {
+    case commands
+    case general
+    case about
+}
+
+private struct SettingsDetail: View {
+    let page: SettingsPage
+
+    var body: some View {
+        Group {
+            switch page {
+            case .commands:
+                CommandEditorPage()
+            case .general:
+                Form { GeneralSection() }
+                    .formStyle(.grouped)
+            case .about:
+                Form { AboutSection() }
+                    .formStyle(.grouped)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
 // MARK: - Commands
 
-private struct CommandsSection: View {
-    @Binding var selectionID: String?
+private struct CommandEditorPage: View {
+    @EnvironmentObject var coordinator: AppCoordinator
     @ObservedObject private var store = LayoutStore.shared
+    @State private var selectionID: String? = "left"
     @State private var editingCommandID: String?
     @FocusState private var focusedCommandID: String?
 
     private var commands: [PlacementCommand] { store.layout.commands }
-
-    private var selectedCommand: PlacementCommand? {
-        guard let selectedID else { return commands.first }
-        return commands.first { $0.id == selectedID } ?? commands.first
-    }
 
     private var selectedID: String? {
         guard let selectionID, commands.contains(where: { $0.id == selectionID }) else {
@@ -54,171 +78,235 @@ private struct CommandsSection: View {
         return selectionID
     }
 
+    private var selectedCommand: PlacementCommand? {
+        guard let selectedID else { return nil }
+        return commands.first { $0.id == selectedID }
+    }
+
     var body: some View {
-        Section {
-            LabeledContent("Activate") {
-                ShortcutPicker(
-                    binding: activationBinding,
-                    placeholder: "Record"
-                )
-                .frame(width: 190, height: 24, alignment: .leading)
+        VStack(spacing: 0) {
+            if !coordinator.isAccessibilityGranted {
+                AccessibilityBanner()
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                Divider()
             }
+
+            HStack(spacing: 0) {
+                commandList
+                    .frame(minWidth: 210, idealWidth: 230, maxWidth: 260)
+
+                Divider()
+
+                if let command = selectedCommand {
+                    commandDetail(command)
+                } else {
+                    VStack(spacing: 10) {
+                        Image(systemName: "rectangle.3.group")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("No Commands")
+                            .font(.headline)
+                        Text("Add a command to create a placement shortcut.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            selectionID = selectedID
+        }
+        .onChange(of: commands.map { $0.id }) { _ in
+            if !commands.contains(where: { $0.id == selectionID }) {
+                selectionID = commands.first?.id
+            }
+        }
+    }
+
+    private var commandList: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Commands")
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+
+            List(selection: $selectionID) {
+                ForEach(commands) { command in
+                    HStack(spacing: 9) {
+                        Image(systemName: "rectangle")
+                            .foregroundStyle(.secondary)
+
+                        if editingCommandID == command.id {
+                            TextField("Command name", text: nameBinding(for: command.id)) {
+                                finishEditingName()
+                            }
+                            .textFieldStyle(.plain)
+                            .focused($focusedCommandID, equals: command.id)
+                        } else {
+                            Text(command.displayName)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 4)
+
+                        if let binding = command.binding {
+                            Text(ShortcutDisplay.string(for: binding))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospaced()
+                        }
+
+                        Button {
+                            if editingCommandID == command.id {
+                                finishEditingName()
+                            } else {
+                                beginEditingName(command.id)
+                            }
+                        } label: {
+                            Image(systemName: editingCommandID == command.id ? "checkmark" : "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(editingCommandID == command.id ? "Finish editing name" : "Edit command name")
+                    }
+                    .contentShape(Rectangle())
+                    .tag(command.id)
+                    .contextMenu {
+                        Button("Move Up") { move(command.id, by: -1) }
+                            .disabled(!canMove(command.id, by: -1))
+                        Button("Move Down") { move(command.id, by: 1) }
+                            .disabled(!canMove(command.id, by: 1))
+                        Button("Rename Command") { beginEditingName(command.id) }
+                        Divider()
+                        Button("Delete Command", role: .destructive) {
+                            delete(command.id)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(command.displayName)
+                    .accessibilityAddTraits(command.id == selectedID ? .isSelected : [])
+                }
+                .onMove { offsets, destination in
+                    store.update { $0.commands.move(fromOffsets: offsets, toOffset: destination) }
+                }
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
 
             Divider()
 
-            if let command = selectedCommand {
-                HStack(alignment: .top, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Command")
-                            .font(.headline)
-
-                        VStack(spacing: 2) {
-                            ForEach(commands) { command in
-                                HStack(spacing: 8) {
-                                    Button {
-                                        selectionID = command.id
-                                    } label: {
-                                        Image(systemName: command.id == selectedID
-                                              ? "largecircle.fill.circle"
-                                              : "circle")
-                                    }
-                                    .buttonStyle(.plain)
-
-                                    if editingCommandID == command.id {
-                                        TextField("", text: nameBinding(for: command.id))
-                                            .textFieldStyle(.plain)
-                                            .focused($focusedCommandID, equals: command.id)
-                                            .onTapGesture { selectionID = command.id }
-                                    } else {
-                                        Text(command.displayName)
-                                            .lineLimit(1)
-                                            .onTapGesture { selectionID = command.id }
-                                    }
-
-                                    Spacer(minLength: 0)
-
-                                    Button {
-                                        if editingCommandID == command.id {
-                                            finishEditingName()
-                                        } else {
-                                            beginEditingName(command.id)
-                                        }
-                                    } label: {
-                                        Image(systemName: editingCommandID == command.id ? "checkmark" : "pencil")
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .help(editingCommandID == command.id ? "Finish editing name" : "Edit command name")
-                                }
-                                .contentShape(Rectangle())
-                                .padding(.vertical, 5)
-                                .foregroundStyle(command.id == selectedID ? Color.accentColor : .primary)
-                                .accessibilityElement(children: .combine)
-                                .accessibilityLabel(command.displayName)
-                                .accessibilityAddTraits(command.id == selectedID ? .isSelected : [])
-                                .contextMenu {
-                                    Button("Move Up") { move(command.id, by: -1) }
-                                        .disabled(!canMove(command.id, by: -1))
-                                    Button("Move Down") { move(command.id, by: 1) }
-                                        .disabled(!canMove(command.id, by: 1))
-                                    Divider()
-                                    Button("Delete Command", role: .destructive) {
-                                        delete(command.id)
-                                    }
-                                }
-                            }
-                        }
-
-                        HStack(spacing: 10) {
-                            Button {
-                                addCommand()
-                            } label: {
-                                Label("Add", systemImage: "plus")
-                            }
-                            .buttonStyle(.borderless)
-
-                            Button {
-                                if let selectedID { move(selectedID, by: -1) }
-                            } label: {
-                                Image(systemName: "chevron.up")
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(selectedID.map { !canMove($0, by: -1) } ?? true)
-                            .help("Move up")
-
-                            Button {
-                                if let selectedID { move(selectedID, by: 1) }
-                            } label: {
-                                Image(systemName: "chevron.down")
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(selectedID.map { !canMove($0, by: 1) } ?? true)
-                            .help("Move down")
-
-                            Button(role: .destructive) {
-                                if let selectedID { delete(selectedID) }
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(selectedID == nil)
-                            .help("Delete command")
-                        }
-                        .padding(.top, 6)
-                    }
-                    .frame(width: 180, alignment: .leading)
-
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        LabeledContent("Shortcut") {
-                            ShortcutPicker(
-                                binding: commandBinding(command.id),
-                                placeholder: "Unbound"
-                            )
-                            .frame(width: 190, height: 24, alignment: .leading)
-                        }
-
-                        ZoneCanvas(
-                            grid: store.layout.grid,
-                            commands: commands,
-                            selection: command,
-                            onEdit: { newRect in
-                                store.update { $0.setRect(newRect, for: command.id) }
-                            }
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: 260)
-
-                        GridControls()
-
-                        HStack {
-                            Text(sizeSummary(for: command))
-                                .font(.callout)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button("Reset") {
-                                store.update { $0.setFraction(command.defaultFractionRect, for: command.id) }
-                            }
-                            .disabled(isDefault(command))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 14) {
+                Button {
+                    addCommand()
+                } label: {
+                    Image(systemName: "plus")
                 }
-            } else {
-                HStack {
-                    Text("No commands yet")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Add command") { addCommand() }
+                .buttonStyle(.borderless)
+                .help("Add command")
+
+                Button {
+                    if let selectedID { move(selectedID, by: -1) }
+                } label: {
+                    Image(systemName: "chevron.up")
                 }
+                .buttonStyle(.borderless)
+                .disabled(selectedID.map { !canMove($0, by: -1) } ?? true)
+                .help("Move command up")
+
+                Button {
+                    if let selectedID { move(selectedID, by: 1) }
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedID.map { !canMove($0, by: 1) } ?? true)
+                .help("Move command down")
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    if let selectedID { delete(selectedID) }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedID == nil)
+                .help("Delete command")
             }
-        } header: {
-            Text("Commands")
-        } footer: {
-            Text("Choose a command to edit its name, shortcut, and zone. Drag on the map to set where **\(selectedCommand?.displayName ?? "the command")** puts a window. Reorder with the arrows or the context menu. Esc cancels placement mode, and Delete clears a shortcut.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(.bar)
         }
+    }
+
+    private func commandDetail(_ command: PlacementCommand) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(command.displayName)
+                            .font(.title2.weight(.semibold))
+                        Text("Edit this command's shortcut and placement zone.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Reset") {
+                        store.update { $0.setFraction(command.defaultFractionRect, for: command.id) }
+                    }
+                    .disabled(isDefault(command))
+                }
+
+                Divider()
+
+                LabeledContent("Activation shortcut") {
+                    ShortcutPicker(
+                        binding: activationBinding,
+                        placeholder: "Record"
+                    )
+                    .frame(width: 190, height: 24, alignment: .leading)
+                }
+
+                LabeledContent("Command shortcut") {
+                    ShortcutPicker(
+                        binding: commandBinding(command.id),
+                        placeholder: "Unbound"
+                    )
+                    .frame(width: 190, height: 24, alignment: .leading)
+                }
+
+                ZoneCanvas(
+                    grid: store.layout.grid,
+                    commands: commands,
+                    selection: command,
+                    onEdit: { newRect in
+                        store.update { $0.setRect(newRect, for: command.id) }
+                    }
+                )
+                .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 280)
+                .accessibilityLabel("Placement zone for \(command.displayName)")
+
+                GridControls()
+
+                Text("Drag across the grid to choose where this command places a window. Reorder commands by dragging them in the sidebar. Esc cancels placement mode, and Delete clears a shortcut.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Text(sizeSummary(for: command))
+                    .font(.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: 620, alignment: .leading)
+            .padding(24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func nameBinding(for commandID: String) -> Binding<String> {
@@ -315,6 +403,9 @@ private struct GridControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Text("Grid")
+                .font(.headline)
+
             Picker("Grid density", selection: densityBinding) {
                 ForEach(GridDensity.allCases) { density in
                     Text(density.displayName).tag(density)
@@ -410,8 +501,34 @@ private struct GeneralSection: View {
                     .foregroundStyle(.secondary)
             }
 
+            Divider()
+
+            Toggle("Sync settings with iCloud", isOn: Binding(
+                get: { store.iCloudSyncEnabled },
+                set: { newValue in store.setICloudSyncEnabled(newValue) }
+            ))
+
+            HStack(spacing: 8) {
+                Image(systemName: store.iCloudSyncStatus.systemImage)
+                Text(store.iCloudSyncStatus.label)
+            }
+            .font(.callout)
+            .foregroundStyle(syncStatusColor)
+
+            Text("Syncs commands, shortcuts, zones, grid, and general preferences through iCloud. Turn it on on each Mac running Tessellate.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         } header: {
             Text("General")
+        }
+    }
+
+    private var syncStatusColor: Color {
+        switch store.iCloudSyncStatus {
+        case .disabled: return .secondary
+        case .syncing: return .accentColor
+        case .synced: return .green
+        case .error: return .red
         }
     }
 }

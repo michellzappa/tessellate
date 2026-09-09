@@ -108,7 +108,14 @@ size is derived from your display so cells come out roughly square, at a density
 you choose (Light / Balanced / Dense), and it is recomputed when the display
 configuration changes.
 
-**General** — launch at login and show/hide the menu bar icon.
+**General** — launch at login, show/hide the menu bar icon, and optionally sync
+settings through iCloud. Sync uses Apple's iCloud Key-Value Store, keeps a local
+copy as a fallback, and should be enabled on each Mac running Tessellate. It
+syncs commands, shortcuts, zones, grid settings, and general preferences; it
+does not sync Accessibility permission, which macOS grants per installation.
+For production sync, enable the iCloud capability's Key-value storage service
+for the App ID and use a provisioned distribution; Apple's KVS API is intended
+for App Store or Mac App Store distribution.
 
 **About** — whether Accessibility is granted, and the full path of the running
 executable. The grant binds to one exact binary, and during development your
@@ -150,7 +157,7 @@ place the conversion lives.
   snaps to character cells, others enforce a minimum size — and Tessellate does
   not currently read the frame back to check.
 - No saved multi-window layouts, drag snapping, gaps, Spaces support,
-  app-specific rules, animations, or sync. None of these are planned.
+  app-specific rules, or animations.
 
 ## Acknowledgments
 
