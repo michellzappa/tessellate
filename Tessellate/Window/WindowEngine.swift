@@ -5,9 +5,10 @@ import CoreGraphics
 private let kAXResizableAttributeRaw = "AXResizable" as CFString
 private let kAXMinSizeAttributeRaw = "AXMinSize" as CFString
 private let kAXFocusedWindowAttributeRaw = "AXFocusedWindow" as CFString
-private let kAXMainWindowAttributeRaw = "AXMainWindow" as CFString
+private let kAXFocusedAttributeRaw = "AXFocused" as CFString
 private let kAXWindowsAttributeRaw = "AXWindows" as CFString
 private let kAXFocusedApplicationAttributeRaw = "AXFocusedApplication" as CFString
+private let kAXTitleAttributeRaw = "AXTitle" as CFString
 private let kAXPositionAttributeRaw = "AXPosition" as CFString
 private let kAXSizeAttributeRaw = "AXSize" as CFString
 
@@ -16,6 +17,11 @@ private extension CGRect {
 }
 
 enum WindowEngine {
+    private struct WindowSelection {
+        let element: AXUIElement
+        let source: String
+    }
+
     static func isTrusted() -> Bool {
         AXIsProcessTrusted()
     }
@@ -25,7 +31,7 @@ enum WindowEngine {
         _ = AXIsProcessTrustedWithOptions(opts)
     }
 
-    static func focusedWindow() -> AXUIElement? {
+    private static func focusedWindow() -> WindowSelection? {
         guard isTrusted() else {
             NSLog("Tessellate: focusedWindow — AX not trusted")
             return nil
@@ -44,29 +50,41 @@ enum WindowEngine {
            CFGetTypeID(appRef) == AXUIElementGetTypeID() {
             let app = appRef as! AXUIElement
 
-            if let win = axElement(in: app, attribute: kAXFocusedWindowAttributeRaw) {
-                return win
-            }
-            if let win = axElement(in: app, attribute: kAXMainWindowAttributeRaw) {
-                NSLog("Tessellate: focusedWindow — using main-window fallback")
-                return win
-            }
-            if let win = largestVisibleWindow(in: app) {
-                NSLog("Tessellate: focusedWindow — using largest-visible fallback (focused app)")
-                return win
+            if let selection = focusedWindow(in: app) {
+                return selection
             }
         }
 
         if let frontApp = NSWorkspace.shared.frontmostApplication {
             let app = AXUIElementCreateApplication(frontApp.processIdentifier)
-            if let win = largestVisibleWindow(in: app) {
-                NSLog("Tessellate: focusedWindow — using largest-visible fallback (frontmost app)")
-                return win
+            if let selection = focusedWindow(in: app) {
+                NSLog("Tessellate: focusedWindow — using frontmost-app fallback")
+                return WindowSelection(
+                    element: selection.element,
+                    source: "frontmost-app/\(selection.source)"
+                )
             }
         }
 
-        NSLog("Tessellate: focusedWindow — no window found")
+        // Do not guess based on size or AXWindows ordering. Those heuristics
+        // are ambiguous when an app, especially Chrome, has multiple windows.
+        NSLog("Tessellate: focusedWindow — no unambiguous focused window found")
         return nil
+    }
+
+    private static func focusedWindow(in app: AXUIElement) -> WindowSelection? {
+        if let win = axElement(in: app, attribute: kAXFocusedWindowAttributeRaw) {
+            return WindowSelection(element: win, source: "AXFocusedWindow")
+        }
+
+        // Some applications do not expose AXFocusedWindow reliably, but do
+        // expose AXFocused on their individual window elements. Only accept a
+        // single focused candidate; never pick one by title, size, or array
+        // order.
+        let windows = axElements(in: app, attribute: kAXWindowsAttributeRaw)
+        let focused = windows.filter { boolAttribute(in: $0, attribute: kAXFocusedAttributeRaw) == true }
+        guard focused.count == 1, let win = focused.first else { return nil }
+        return WindowSelection(element: win, source: "AXWindows[AXFocused]")
     }
 
     private static func axElement(in parent: AXUIElement, attribute: CFString) -> AXUIElement? {
@@ -75,38 +93,43 @@ enum WindowEngine {
         guard result == .success, let ref, CFGetTypeID(ref) == AXUIElementGetTypeID() else {
             return nil
         }
-        return ref as! AXUIElement
+        return (ref as! AXUIElement)
     }
 
-    private static func largestVisibleWindow(in app: AXUIElement) -> AXUIElement? {
+    private static func axElements(in parent: AXUIElement, attribute: CFString) -> [AXUIElement] {
         var ref: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(app, kAXWindowsAttributeRaw, &ref)
+        let result = AXUIElementCopyAttributeValue(parent, attribute, &ref)
         guard result == .success, let ref, CFGetTypeID(ref) == CFArrayGetTypeID() else {
-            return nil
+            return []
         }
         let arr = ref as! CFArray
         let count = CFArrayGetCount(arr)
 
-        var bestWin: AXUIElement?
-        var bestArea: CGFloat = -1
+        var elements: [AXUIElement] = []
+        elements.reserveCapacity(count)
 
         for i in 0..<count {
             let raw = CFArrayGetValueAtIndex(arr, i)
             let unmanaged = Unmanaged<CFTypeRef>.fromOpaque(raw!).takeUnretainedValue()
             guard CFGetTypeID(unmanaged) == AXUIElementGetTypeID() else { continue }
-            let win = unmanaged as! AXUIElement
-
-            guard let frame = frame(forAXWindow: win) else { continue }
-            guard frame.width >= 100, frame.height >= 100 else { continue }
-
-            let area = frame.width * frame.height
-            if area > bestArea {
-                bestArea = area
-                bestWin = win
-            }
+            elements.append(unmanaged as! AXUIElement)
         }
 
-        return bestWin
+        return elements
+    }
+
+    private static func boolAttribute(in element: AXUIElement, attribute: CFString) -> Bool? {
+        var ref: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(element, attribute, &ref)
+        guard result == .success, let ref else { return nil }
+        return ref as? Bool
+    }
+
+    private static func stringAttribute(in element: AXUIElement, attribute: CFString) -> String? {
+        var ref: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(element, attribute, &ref)
+        guard result == .success, let ref else { return nil }
+        return (ref as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func isResizable(_ axWindow: AXUIElement) -> Bool {
@@ -157,20 +180,33 @@ enum WindowEngine {
     struct FocusedWindow {
         let element: AXUIElement
         let frame: CGRect          // Accessibility coords (top-left origin)
+        let pid: pid_t
         let appName: String
+        let windowTitle: String
+        let selectionSource: String
         let appIcon: NSImage?
         let screen: NSScreen
+
+        var diagnosticDescription: String {
+            let title = windowTitle.isEmpty ? "<untitled>" : windowTitle
+            return "app=\(appName) pid=\(pid) title=\"\(title)\" source=\(selectionSource) frame=\(frame)"
+        }
     }
 
     static func captureFocusedWindow() -> FocusedWindow? {
-        guard let element = focusedWindow(), let frame = frame(forAXWindow: element) else { return nil }
+        guard let selection = focusedWindow(),
+              let frame = frame(forAXWindow: selection.element) else { return nil }
+        let element = selection.element
         var pid: pid_t = 0
         AXUIElementGetPid(element, &pid)
         let app = NSRunningApplication(processIdentifier: pid)
         return FocusedWindow(
             element: element,
             frame: frame,
+            pid: pid,
             appName: app?.localizedName ?? "Focused window",
+            windowTitle: stringAttribute(in: element, attribute: kAXTitleAttributeRaw) ?? "",
+            selectionSource: selection.source,
             appIcon: app?.icon,
             screen: screen(forAXFrame: frame) ?? NSScreen.main ?? NSScreen.screens[0]
         )

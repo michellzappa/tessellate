@@ -129,7 +129,7 @@ final class AppCoordinator: ObservableObject {
         hotkeyManager.enterPlacementMode()
 
         let target = WindowEngine.captureFocusedWindow()
-        NSLog("Tessellate: captured target=\(target?.appName ?? "none")")
+        NSLog("Tessellate: captured target=\(target?.diagnosticDescription ?? "none")")
         pendingTarget = target
         if let target {
             FocusIndicatorController.shared.show(target: target)
@@ -152,7 +152,7 @@ final class AppCoordinator: ObservableObject {
         }
         let cgRect = ScreenGeometry.rect(command.fraction, on: target.screen)
         let ok = WindowEngine.apply(cgRect, to: target.element)
-        NSLog("Tessellate: apply \(command.id) (\(command.displayName)) -> \(cgRect) on \(target.appName) ok=\(ok)")
+        NSLog("Tessellate: apply \(command.id) (\(command.displayName)) -> \(cgRect) on \(target.diagnosticDescription) ok=\(ok)")
     }
 
     func openSettings() {
