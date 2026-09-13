@@ -3,30 +3,18 @@ import AppKit
 
 @main
 struct TessellateApp: App {
-    /// The real app icon, scaled down for the menu bar — a recognizable mark
-    /// beats a generic SF Symbol standing in for "window".
-    private static let menuBarIcon: NSImage = {
-        let source = NSApp.applicationIconImage ?? NSImage(size: NSSize(width: 18, height: 18))
-        let size = NSSize(width: 18, height: 18)
-        // The icon's plate spans 824/1024 of the artwork; scale so it lands at 16pt
-        // inside the 18pt canvas — the menu bar plate size shared with Cargo/Headroom.
-        let plateFraction: CGFloat = 824 / 1024
-        let drawSize = 16 / plateFraction
-        let drawRect = NSRect(
-            x: (size.width - drawSize) / 2,
-            y: (size.height - drawSize) / 2,
-            width: drawSize,
-            height: drawSize
-        )
-        let resized = NSImage(size: size, flipped: false) { _ in
-            source.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
-            return true
-        }
-        // Keep it in full color rather than template-tinted monochrome — it's
-        // meant to read as the app icon, not as a system-style glyph.
-        resized.isTemplate = false
-        return resized
-    }()
+    /// The three panes on the shared house plate (see MenuBarPlate).
+    private static let menuBarIcon: NSImage = MenuBarPlate.image { _ in
+        let field = MenuBarPlate.field
+        let gap: CGFloat = 0.5
+        let leftWidth = ((field.width - gap) / 2 * 2).rounded() / 2
+        let rightX = field.minX + leftWidth + gap
+        let rightWidth = field.maxX - rightX
+        let rightHeight = (field.height - gap) / 2
+        MenuBarPlate.mark(NSRect(x: field.minX, y: field.minY, width: leftWidth, height: field.height), alpha: 0.97)
+        MenuBarPlate.mark(NSRect(x: rightX, y: field.minY + rightHeight + gap, width: rightWidth, height: rightHeight), alpha: 0.72)
+        MenuBarPlate.mark(NSRect(x: rightX, y: field.minY, width: rightWidth, height: rightHeight), alpha: 0.52)
+    }
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var coordinator = AppCoordinator.shared
