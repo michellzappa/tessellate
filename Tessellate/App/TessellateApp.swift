@@ -8,15 +8,20 @@ struct TessellateApp: App {
     private static let menuBarIcon: NSImage = {
         let source = NSApp.applicationIconImage ?? NSImage(size: NSSize(width: 18, height: 18))
         let size = NSSize(width: 18, height: 18)
-        let resized = NSImage(size: size)
-        resized.lockFocus()
-        source.draw(
-            in: NSRect(origin: .zero, size: size),
-            from: .zero,
-            operation: .sourceOver,
-            fraction: 1
+        // The icon's plate spans 824/1024 of the artwork; scale so it lands at 16pt
+        // inside the 18pt canvas — the menu bar plate size shared with Cargo/Headroom.
+        let plateFraction: CGFloat = 824 / 1024
+        let drawSize = 16 / plateFraction
+        let drawRect = NSRect(
+            x: (size.width - drawSize) / 2,
+            y: (size.height - drawSize) / 2,
+            width: drawSize,
+            height: drawSize
         )
-        resized.unlockFocus()
+        let resized = NSImage(size: size, flipped: false) { _ in
+            source.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
+            return true
+        }
         // Keep it in full color rather than template-tinted monochrome — it's
         // meant to read as the app icon, not as a system-style glyph.
         resized.isTemplate = false
