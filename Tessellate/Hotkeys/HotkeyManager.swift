@@ -50,16 +50,14 @@ final class HotkeyManager: ObservableObject {
         if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
     }
 
-    deinit {
-        if let ref = activationRef {
-            UnregisterEventHotKey(ref)
-        }
-        if let handler = eventHandler {
-            RemoveEventHandler(handler)
-        }
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
+    /// The manager lives as long as the app; tear down explicitly if that changes.
+    func stop() {
+        if let ref = activationRef { UnregisterEventHotKey(ref) }
+        if let handler = eventHandler { RemoveEventHandler(handler) }
+        if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
+        activationRef = nil
+        eventHandler = nil
+        eventTap = nil
     }
 
     private func installEventHandler() {

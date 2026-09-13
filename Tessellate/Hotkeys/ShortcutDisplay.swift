@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
@@ -23,6 +24,17 @@ enum ShortcutDisplay {
     static func keyboardShortcut(for binding: CommandBinding?) -> KeyboardShortcut? {
         guard let binding, let key = keyEquivalent(for: binding.keyCode) else { return nil }
         return KeyboardShortcut(key, modifiers: eventModifiers(for: binding.modifiers))
+    }
+
+    /// AppKit menu form of the binding: key-equivalent string plus modifier mask.
+    static func menuKeyEquivalent(for binding: CommandBinding?) -> (String, NSEvent.ModifierFlags)? {
+        guard let binding, let key = keyEquivalent(for: binding.keyCode) else { return nil }
+        var flags: NSEvent.ModifierFlags = []
+        if binding.modifiers & UInt(cmdKey) != 0 { flags.insert(.command) }
+        if binding.modifiers & UInt(optionKey) != 0 { flags.insert(.option) }
+        if binding.modifiers & UInt(controlKey) != 0 { flags.insert(.control) }
+        if binding.modifiers & UInt(shiftKey) != 0 { flags.insert(.shift) }
+        return (String(key.character), flags)
     }
 
     private static func keyEquivalent(for keyCode: UInt16) -> KeyEquivalent? {

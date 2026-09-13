@@ -4,16 +4,20 @@ options:
   # Keep CI's generated project readable by the Xcode 15.4 runner.
   projectFormat: xcode15_3
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "14.0"
   createIntermediateGroups: true
   groupSortPosition: top
 configs:
   Debug: debug
   Release: release
+packages:
+  HouseKit:
+    path: ../housekit
 settings:
   base:
-    SWIFT_VERSION: "5.9"
-    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_STRICT_CONCURRENCY: complete
     # Sign with a real identity, not ad-hoc: TCC keys the Accessibility grant to
     # the code signature, so an ad-hoc build loses the permission on every
     # rebuild. Manual signing avoids needing a "Mac Development" cert.
@@ -38,6 +42,9 @@ targets:
         excludes:
           - "Resources/Info.plist"
           - "Resources/Tessellate.entitlements"
+    dependencies:
+      - package: HouseKit
+        product: HouseKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tessellate.Tessellate

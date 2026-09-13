@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import ServiceManagement
+import HouseKit
 import SwiftUI
 
 @MainActor
@@ -15,6 +15,7 @@ final class AppCoordinator: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var trustPollTimer: Timer?
+    private lazy var settingsWindowController = SettingsWindowController.tessellate(coordinator: self)
 
     /// The window captured when the activation hotkey fired. Placement acts on
     /// this, not on whatever happens to be focused when the command key lands.
@@ -87,15 +88,9 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func syncLaunchAtLogin(_ desired: Bool) {
-        let current = SMAppService.mainApp.status
-        let enabled = current == .enabled
-        if desired == enabled { return }
+        if desired == LaunchAtLogin.isEnabled { return }
         do {
-            if desired {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
+            try LaunchAtLogin.setEnabled(desired)
         } catch {
             NSLog("Tessellate: launch at login toggle failed: \(error)")
         }
@@ -156,39 +151,11 @@ final class AppCoordinator: ObservableObject {
     }
 
     func openSettings() {
-        if let existing = NSApp.windows.first(where: { $0.identifier?.rawValue.contains("settings") == true }) {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        settingsOpen = true
-        openSettingsWindowProgrammatically()
-    }
-
-    private func openSettingsWindowProgrammatically() {
-        let host = NSHostingController(rootView:
-            SettingsView()
-                .environmentObject(self)
-        )
-        let window = NSWindow(contentViewController: host)
-        window.title = "Tessellate Settings"
-        window.setContentSize(NSSize(width: 900, height: 640))
-        window.contentMinSize = NSSize(width: 760, height: 560)
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.identifier = NSUserInterfaceItemIdentifier("tessellate.settings")
-        window.setFrameAutosaveName("Tessellate.Settings")
-        window.collectionBehavior = [.moveToActiveSpace]
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        settingsWindowController.show()
     }
 
     func toggleLaunchAtLogin() {
         store.layout.launchAtLogin.toggle()
-    }
-
-    var isLaunchAtLoginEnabled: Bool {
-        SMAppService.mainApp.status == .enabled
     }
 
     func quit() {
@@ -196,8 +163,6 @@ final class AppCoordinator: ObservableObject {
     }
 
     func openAccessibilitySettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
-        }
+        PermissionRow.accessibility.openSettings()
     }
 }

@@ -2,15 +2,15 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 
-private let kAXResizableAttributeRaw = "AXResizable" as CFString
-private let kAXMinSizeAttributeRaw = "AXMinSize" as CFString
-private let kAXFocusedWindowAttributeRaw = "AXFocusedWindow" as CFString
-private let kAXFocusedAttributeRaw = "AXFocused" as CFString
-private let kAXWindowsAttributeRaw = "AXWindows" as CFString
-private let kAXFocusedApplicationAttributeRaw = "AXFocusedApplication" as CFString
-private let kAXTitleAttributeRaw = "AXTitle" as CFString
-private let kAXPositionAttributeRaw = "AXPosition" as CFString
-private let kAXSizeAttributeRaw = "AXSize" as CFString
+nonisolated(unsafe) private let kAXResizableAttributeRaw = "AXResizable" as CFString
+nonisolated(unsafe) private let kAXMinSizeAttributeRaw = "AXMinSize" as CFString
+nonisolated(unsafe) private let kAXFocusedWindowAttributeRaw = "AXFocusedWindow" as CFString
+nonisolated(unsafe) private let kAXFocusedAttributeRaw = "AXFocused" as CFString
+nonisolated(unsafe) private let kAXWindowsAttributeRaw = "AXWindows" as CFString
+nonisolated(unsafe) private let kAXFocusedApplicationAttributeRaw = "AXFocusedApplication" as CFString
+nonisolated(unsafe) private let kAXTitleAttributeRaw = "AXTitle" as CFString
+nonisolated(unsafe) private let kAXPositionAttributeRaw = "AXPosition" as CFString
+nonisolated(unsafe) private let kAXSizeAttributeRaw = "AXSize" as CFString
 
 private extension CGRect {
     var area: CGFloat { isNull ? 0 : width * height }
@@ -27,7 +27,7 @@ enum WindowEngine {
     }
 
     static func requestTrust() {
-        let opts = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true] as CFDictionary
+        let opts = ["AXTrustedCheckOptionPrompt" as CFString: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(opts)
     }
 

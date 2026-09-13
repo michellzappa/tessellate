@@ -35,7 +35,7 @@ Space to center is a perfectly good setup.
 
 ## Requirements
 
-- macOS 13 (Ventura) or later
+- macOS 14 (Sonoma) or later
 - Accessibility permission
 
 Tessellate needs Accessibility for two things: reading the focused window
@@ -49,12 +49,15 @@ asks for the permission on first launch and picks it up the moment you grant it
 No notarized release yet. Build it yourself:
 
 ```sh
-brew install xcodegen
-xcodegen generate
-open Tessellate.xcodeproj
+./scripts/build-app.sh      # → /Applications/Tessellate.app, signed, icon regenerated
 ```
 
-Set your own `DEVELOPMENT_TEAM` in `project.yml`, then ⌘R.
+Needs `xcodegen` and the sibling [`../housekit`](../housekit) package, which
+supplies the menu bar plate, the app icon, the settings window chrome and
+launch-at-login — the pieces Tessellate shares with Cargo and Strata. To work
+in Xcode instead: `xcodegen generate && open Tessellate.xcodeproj`.
+
+Set your own `DEVELOPMENT_TEAM` in `project.yml` first.
 
 ### A note on signing
 
@@ -73,6 +76,11 @@ security find-identity -v -p codesigning
 Note that the team ID is the one reported by `codesign -dv` on a signed
 artifact, which is not the identifier shown in parentheses in the certificate
 name.
+
+Local builds are signed **without** the iCloud key-value entitlement: it is a
+restricted entitlement, launchd refuses to start an unprovisioned app that
+claims it, and there is no provisioning profile on a dev machine. iCloud sync
+therefore only works in the notarized release build.
 
 ### Downloadable releases
 
@@ -108,8 +116,8 @@ size is derived from your display so cells come out roughly square, at a density
 you choose (Light / Balanced / Dense), and it is recomputed when the display
 configuration changes.
 
-**General** — launch at login, show/hide the menu bar icon, and optionally sync
-settings through iCloud. Sync uses Apple's iCloud Key-Value Store, keeps a local
+**General** — launch at login, show/hide the menu bar icon, Accessibility
+status, and optionally sync settings through iCloud. Sync uses Apple's iCloud Key-Value Store, keeps a local
 copy as a fallback, and should be enabled on each Mac running Tessellate. It
 syncs commands, shortcuts, zones, grid settings, and general preferences; it
 does not sync Accessibility permission, which macOS grants per installation.
@@ -117,14 +125,16 @@ For production sync, enable the iCloud capability's Key-value storage service
 for the App ID and use a provisioned distribution; Apple's KVS API is intended
 for App Store or Mac App Store distribution.
 
-**About** — whether Accessibility is granted, and the full path of the running
-executable. The grant binds to one exact binary, and during development your
+**About** — version and the full path of the running executable. The
+Accessibility grant binds to one exact binary, and during development your
 Xcode build and your command-line build are different files, so knowing which
 one is asking saves a lot of confusion.
 
 ## Architecture
 
-Roughly 2,100 lines of Swift, no dependencies.
+Roughly 2,800 lines of Swift plus the shared `HouseKit` package. AppKit
+shell (status item, menu, settings window); the Commands editor is the one
+SwiftUI page left, hosted inside the AppKit settings window.
 
 | | |
 | --- | --- |
@@ -132,9 +142,10 @@ Roughly 2,100 lines of Swift, no dependencies.
 | `Window/WindowEngine` | Accessibility API: find the focused window, read and set its frame |
 | `Window/ScreenGeometry` | Cocoa ↔ Accessibility coordinate conversion, and fraction → screen rect |
 | `Overlay/FocusIndicator` | The outline around the window that is about to move |
-| `Settings/*` | The settings window: one page — command editor, general, about |
+| `Settings/*` | Commands page (SwiftUI, hosted) and the HouseKit settings window with the shared General and About pages |
 | `Models/TessellateLayout` | Editable commands and grid; persisted to `UserDefaults` |
 | `App/AppCoordinator` | Wires the above together |
+| `App/TessellateApp` | `NSStatusItem` and its menu — header, commands with shortcuts, then the house tail (Settings, Launch at Login, Quit) |
 
 Two decisions worth knowing about if you read the code:
 
