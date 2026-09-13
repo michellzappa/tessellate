@@ -64,7 +64,7 @@ final class TessellateApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusMenu.addItem(StatusMenu.sectionHeader(header))
         for command in store.layout.commands {
             let item = NSMenuItem(title: command.displayName, action: #selector(applyCommand(_:)), keyEquivalent: "")
-            if let (key, modifiers) = ShortcutDisplay.menuKeyEquivalent(for: command.binding) {
+            if let (key, modifiers) = command.binding?.menuKeyEquivalent {
                 item.keyEquivalent = key
                 item.keyEquivalentModifierMask = modifiers
             }

@@ -1,5 +1,6 @@
-import SwiftUI
 import AppKit
+import HouseKit
+import SwiftUI
 
 struct CommandEditorPage: View {
     @EnvironmentObject var coordinator: AppCoordinator
@@ -96,7 +97,7 @@ struct CommandEditorPage: View {
                         Spacer(minLength: 4)
 
                         if let binding = command.binding {
-                            Text(ShortcutDisplay.string(for: binding))
+                            Text(binding.displayString)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .monospaced()
@@ -205,18 +206,12 @@ struct CommandEditorPage: View {
                 Divider()
 
                 LabeledContent("Activation shortcut") {
-                    ShortcutPicker(
-                        binding: activationBinding,
-                        placeholder: "Record"
-                    )
+                    ShortcutRecorderView(binding: activationBinding, placeholder: "Record", requiresModifiers: true)
                     .frame(width: 190, height: 24, alignment: .leading)
                 }
 
                 LabeledContent("Command shortcut") {
-                    ShortcutPicker(
-                        binding: commandBinding(command.id),
-                        placeholder: "Unbound"
-                    )
+                    ShortcutRecorderView(binding: commandBinding(command.id), placeholder: "Unbound")
                     .frame(width: 190, height: 24, alignment: .leading)
                 }
 
@@ -438,5 +433,25 @@ private struct AccessibilityBanner: View {
                 .buttonStyle(.borderedProminent)
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// HouseKit's AppKit recorder inside the SwiftUI Commands page — goes away
+/// with the page's AppKit rewrite (issue #1).
+private struct ShortcutRecorderView: NSViewRepresentable {
+    @Binding var binding: CommandBinding?
+    var placeholder: String
+    var requiresModifiers = false
+
+    func makeNSView(context: Context) -> ShortcutRecorder {
+        let recorder = ShortcutRecorder(binding: binding) { binding = $0 }
+        recorder.placeholder = placeholder
+        recorder.requiresModifiers = requiresModifiers
+        return recorder
+    }
+
+    func updateNSView(_ recorder: ShortcutRecorder, context: Context) {
+        if recorder.binding != binding { recorder.binding = binding }
+        recorder.onChange = { binding = $0 }
     }
 }

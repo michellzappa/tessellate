@@ -138,7 +138,7 @@ SwiftUI page left, hosted inside the AppKit settings window.
 
 | | |
 | --- | --- |
-| `Hotkeys/HotkeyManager` | Carbon `RegisterEventHotKey` for activation; a `CGEvent` tap, created once at launch and enabled only during placement mode, for command keys |
+| `Hotkeys/HotkeyManager` | Carbon `RegisterEventHotKey` for activation; a `CGEvent` tap, created once at launch and enabled only during placement mode, for command keys. Bindings are `HouseKit.KeyBinding`; the shortcut control is HouseKit's `ShortcutRecorder` |
 | `Window/WindowEngine` | Accessibility API: find the focused window, read and set its frame |
 | `Window/ScreenGeometry` | Cocoa ↔ Accessibility coordinate conversion, and fraction → screen rect |
 | `Overlay/FocusIndicator` | The outline around the window that is about to move |

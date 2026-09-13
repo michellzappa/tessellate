@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import HouseKit
 import Carbon.HIToolbox
 
 /// A user-editable placement command. The ID is stable so renaming or reordering
@@ -241,15 +242,8 @@ struct GridDimensions: Codable, Equatable {
     }
 }
 
-struct CommandBinding: Codable, Equatable, Hashable {
-    var keyCode: UInt16
-    var modifiers: UInt
-
-    init(keyCode: UInt16, modifiers: UInt) {
-        self.keyCode = keyCode
-        self.modifiers = modifiers
-    }
-}
+/// Tessellate's name for the house binding type; stored shape is identical.
+typealias CommandBinding = KeyBinding
 
 struct TessellateLayout: Codable, Equatable {
     var grid: GridDimensions
