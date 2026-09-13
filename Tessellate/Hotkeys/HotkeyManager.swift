@@ -2,14 +2,14 @@ import AppKit
 import Carbon
 import CoreGraphics
 import Combine
+import HouseKit
 
 @MainActor
 final class HotkeyManager: ObservableObject {
     private let store = LayoutStore.shared
     private var cancellables = Set<AnyCancellable>()
 
-    private var activationRef: EventHotKeyRef?
-    private var eventHandler: EventHandlerRef?
+    private let activation = GlobalHotkey(signature: "TESS")
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -41,7 +41,10 @@ final class HotkeyManager: ObservableObject {
                 self?.reregister()
             }
             .store(in: &cancellables)
-        installEventHandler()
+        activation.onPress = { [weak self] in
+            NSLog("Tessellate: activation hotkey fired")
+            self?.onActivation()
+        }
         registerActivation()
         // Create the tap up front and leave it disabled. Creating a tap costs
         // milliseconds and only starts delivering after the run loop turns —
@@ -52,68 +55,19 @@ final class HotkeyManager: ObservableObject {
 
     /// The manager lives as long as the app; tear down explicitly if that changes.
     func stop() {
-        if let ref = activationRef { UnregisterEventHotKey(ref) }
-        if let handler = eventHandler { RemoveEventHandler(handler) }
+        activation.stop()
         if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
-        activationRef = nil
-        eventHandler = nil
         eventTap = nil
     }
 
-    private func installEventHandler() {
-        guard eventHandler == nil else { return }
-        var spec = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(
-            GetEventDispatcherTarget(),
-            { _, _, userData -> OSStatus in
-                guard let userData else { return noErr }
-                let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
-                Task { @MainActor in
-                    NSLog("Tessellate: activation hotkey fired")
-                    manager.onActivation()
-                }
-                return noErr
-            },
-            1,
-            &spec,
-            selfPtr,
-            &eventHandler
-        )
-    }
-
     private func registerActivation() {
-        if let ref = activationRef {
-            UnregisterEventHotKey(ref)
-            activationRef = nil
-        }
         let layout = store.layout
-        let hotKeyID = EventHotKeyID(signature: HotkeySignature.activation, id: 1)
-        var ref: EventHotKeyRef?
-        guard let activationKeyCode = layout.activationKeyCode else {
+        guard let keyCode = layout.activationKeyCode else {
             NSLog("Tessellate: activation hotkey is unbound")
+            activation.register(nil)
             return
         }
-        let status = RegisterEventHotKey(
-            UInt32(activationKeyCode),
-            UInt32(layout.activationModifiers),
-            hotKeyID,
-            // Must match the target the handler above is installed on, or the
-            // hotkey fires into a target with no handler and nothing happens.
-            GetEventDispatcherTarget(),
-            0,
-            &ref
-        )
-        if status == noErr {
-            activationRef = ref
-            NSLog("Tessellate: activation hotkey registered (keyCode=\(activationKeyCode) mods=\(layout.activationModifiers))")
-        } else {
-            activationRef = nil
-            NSLog("Tessellate: activation hotkey FAILED to register status=\(status)")
-        }
+        activation.register(KeyBinding(keyCode: keyCode, modifiers: layout.activationModifiers))
     }
 
     private func reregister() {
@@ -263,8 +217,4 @@ final class HotkeyManager: ObservableObject {
         if flags.contains(.maskShift) { mods |= UInt(shiftKey) }
         return mods
     }
-}
-
-enum HotkeySignature {
-    static let activation: OSType = 0x7473656c
 }

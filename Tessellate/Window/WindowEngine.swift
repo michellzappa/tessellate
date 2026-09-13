@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import HouseKit
 
 nonisolated(unsafe) private let kAXResizableAttributeRaw = "AXResizable" as CFString
 nonisolated(unsafe) private let kAXMinSizeAttributeRaw = "AXMinSize" as CFString
@@ -22,14 +23,8 @@ enum WindowEngine {
         let source: String
     }
 
-    static func isTrusted() -> Bool {
-        AXIsProcessTrusted()
-    }
-
-    static func requestTrust() {
-        let opts = ["AXTrustedCheckOptionPrompt" as CFString: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(opts)
-    }
+    static func isTrusted() -> Bool { Accessibility.isTrusted }
+    static func requestTrust() { Accessibility.requestTrust() }
 
     private static func focusedWindow() -> WindowSelection? {
         guard isTrusted() else {
