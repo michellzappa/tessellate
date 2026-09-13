@@ -20,9 +20,22 @@ jobs:
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
       APPLE_API_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_API_PRIVATE_KEY_BASE64 }}
 
+    defaults:
+      run:
+        working-directory: app
+
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          path: app
+
+      # HouseKit is a sibling path dependency (../housekit) in project.yml.
+      - name: Check out HouseKit
+        uses: actions/checkout@v4
+        with:
+          repository: michellzappa/housekit
+          path: housekit
 
       - name: Install XcodeGen
         run: brew install xcodegen
