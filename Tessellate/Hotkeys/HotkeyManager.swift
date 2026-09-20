@@ -158,8 +158,11 @@ final class HotkeyManager: ObservableObject {
     }
 
     func reenableTap() {
-        guard let tap = eventTap else { return }
-        CGEvent.tapEnable(tap: tap, enable: inPlacementMode)
+        // A disabled-tap notification can arrive after placement mode ends.
+        // Disabling an already-disabled tap here can produce another notification
+        // and keep the callback/task loop running while the app is idle.
+        guard inPlacementMode, let tap = eventTap else { return }
+        CGEvent.tapEnable(tap: tap, enable: true)
     }
 
     private func removeTap() {
