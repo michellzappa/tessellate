@@ -19,7 +19,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.4.1</string>
 	<key>CFBundleVersion</key>
-	<string>17</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -29,6 +29,12 @@
 	<key>NSSupportsAutomaticTermination</key>
 	<true/>
 	<key>NSSupportsSuddenTermination</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/michellzappa/tessellate/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
+	<key>SUEnableAutomaticChecks</key>
 	<true/>
 </dict>
 </plist>
