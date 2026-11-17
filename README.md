@@ -52,7 +52,8 @@ No notarized release yet. Build it yourself:
 ./scripts/build-app.sh      # → /Applications/Tessellate.app, signed, icon regenerated
 ```
 
-Needs `xcodegen` and the sibling [`../housekit`](../housekit) package, which
+Needs `xcodegen`. [HouseKit](https://github.com/michellzappa/housekit), pinned to a
+release tag in `project.yml`,
 supplies the menu bar plate, the app icon, the settings window chrome and
 launch-at-login — the pieces Tessellate shares with Cargo and Strata. To work
 in Xcode instead: `xcodegen generate && open Tessellate.xcodeproj`.
