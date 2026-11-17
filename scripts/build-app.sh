@@ -25,6 +25,9 @@ xcodebuild -project Tessellate.xcodeproj -scheme Tessellate -configuration "$con
   CODE_SIGNING_ALLOWED=NO -quiet build
 app="build/DerivedData/Build/Products/$config/Tessellate.app"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$app/Contents/Info.plist"
+# Sparkle ships signed by its own team; hardened runtime refuses to load
+# a framework from another team, so sign it with ours first.
+codesign --force --deep --options runtime --sign "Apple Development" "$app/Contents/Frameworks/Sparkle.framework"
 # Local builds carry no provisioning profile, and the iCloud KVS entitlement
 # is restricted: launchd refuses to start an app that claims it unprovisioned.
 # Sign without it here; the release workflow signs with the profile and keeps it.

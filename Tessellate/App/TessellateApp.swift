@@ -1,10 +1,13 @@
 import AppKit
 import HouseKit
+import HouseKitSparkle
 
 /// AppKit entry point: status item + menu, same shape as Cargo and Strata.
 @main
 @MainActor
 final class TessellateApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    /// Sparkle. Feed and key come from Info.plist (housekit docs/releasing.md).
+    private let updates = SparkleUpdater(appName: "Tessellate")
     private var statusItem: NSStatusItem!
     private var statusMenu: NSMenu!
     private let coordinator = AppCoordinator.shared
@@ -79,7 +82,8 @@ final class TessellateApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settings: #selector(showSettings(_:)),
             launchAtLogin: #selector(toggleLaunchAtLogin(_:)),
             launchAtLoginEnabled: store.layout.launchAtLogin,
-            quit: #selector(quit(_:))
+            quit: #selector(quit(_:)),
+            updates: updates
         )
     }
 
